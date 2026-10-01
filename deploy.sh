@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Provision Secure Finance Vault on a cloud Linux server and bring the site live.
-# Run as root on a fresh Debian/Ubuntu host:  sudo ./deploy.sh --domain 203.0.113.10
+# Run as root: sudo ./deploy.sh --domain finance.example.com
 set -Eeuo pipefail
 umask 077
 
@@ -12,22 +12,27 @@ BIND_HOST="127.0.0.1"
 BIND_PORT="5555"
 DOMAIN=""
 EMAIL=""
+REPO_URL=""
+BRANCH=""
 ENABLE_TLS="yes"
 CONFIGURE_FIREWALL="yes"
 SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"
+CLONE_DIR=""
 
 fail() { echo "ERROR: $*" >&2; exit 1; }
 step() { echo; echo "==> $*"; }
 
 usage() {
     cat <<USAGE
-Usage: sudo ./deploy.sh --domain <fqdn-or-ipv4> [--email <address>] [options]
+Usage: sudo ./deploy.sh --domain <domain-name-or-ipv4> [--email <address>] [options]
 
 Required:
-    --domain <fqdn-or-ipv4>  Public hostname or public IPv4 served over HTTPS.
+    --domain <host>        Public domain name or IPv4 served over HTTPS.
 
 Options:
   --email <address>      Contact address for Let's Encrypt registration.
+    --repo-url <url>       Clone the application from a Git repository URL.
+    --branch <name>        Branch to clone; requires --repo-url.
     --no-tls               Skip certificate setup; serve plain HTTP on port 80 only.
   --no-firewall          Skip UFW configuration.
   --port <number>        Loopback port for the application (default 5555).
@@ -43,6 +48,16 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --domain) DOMAIN="${2:-}"; shift 2 ;;
         --email) EMAIL="${2:-}"; shift 2 ;;
+        --repo-url)
+            [[ $# -ge 2 && -n "$2" ]] || fail "--repo-url requires a Git URL."
+            REPO_URL="$2"
+            shift 2
+            ;;
+        --branch)
+            [[ $# -ge 2 && -n "$2" ]] || fail "--branch requires a branch name."
+            BRANCH="$2"
+            shift 2
+            ;;
         --no-tls) ENABLE_TLS="no"; shift ;;
         --no-firewall) CONFIGURE_FIREWALL="no"; shift ;;
         --port) BIND_PORT="${2:-}"; shift 2 ;;
@@ -52,7 +67,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-[[ $EUID -eq 0 ]] || fail "Run this script as root: sudo ./deploy.sh --domain <fqdn>"
+[[ $EUID -eq 0 ]] || fail "Run this script as root: sudo ./deploy.sh --domain <domain-name-or-ipv4>"
 [[ -n "$DOMAIN" ]] || { usage; fail "--domain is required"; }
 HOST_IS_IP="no"
 if [[ "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -62,20 +77,45 @@ import ipaddress, sys
 ipaddress.IPv4Address(sys.argv[1])
 PY
 else
-    [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || fail "Invalid hostname: $DOMAIN"
+    python3 - "$DOMAIN" <<'PY' || fail "Invalid domain name: $DOMAIN"
+import re, sys
+
+domain = sys.argv[1]
+labels = domain.split('.')
+valid_label = re.compile(r'^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$')
+if len(domain) > 253 or len(labels) < 2 or any(not valid_label.fullmatch(label) for label in labels):
+    raise SystemExit(1)
+PY
 fi
 [[ "$BIND_PORT" =~ ^[0-9]+$ ]] || fail "Invalid port: $BIND_PORT"
 command -v apt-get >/dev/null 2>&1 || fail "This script supports Debian/Ubuntu (apt-get) only."
-[[ -f "$SOURCE_DIR/app.py" && -f "$SOURCE_DIR/requirements.txt" ]] \
-    || fail "Run this script from the application directory; app.py was not found."
+[[ -z "$BRANCH" || -n "$REPO_URL" ]] || fail "--branch requires --repo-url."
+if [[ -z "$REPO_URL" ]]; then
+    [[ -f "$SOURCE_DIR/app.py" && -f "$SOURCE_DIR/requirements.txt" ]] \
+        || fail "Run this script beside app.py and requirements.txt, or provide --repo-url."
+fi
 
 step "Installing system packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get upgrade -y -qq
-apt-get install -y -qq python3-venv python3-pip nginx rsync ca-certificates curl iproute2 sudo
+apt-get install -y -qq python3-venv python3-pip nginx rsync ca-certificates curl iproute2 sudo git
 if [[ "$CONFIGURE_FIREWALL" == "yes" ]]; then
     apt-get install -y -qq ufw
+fi
+
+if [[ -n "$REPO_URL" ]]; then
+    step "Fetching application source from $REPO_URL"
+    CLONE_DIR="$(mktemp -d /tmp/secure-finance-source.XXXXXX)"
+    trap 'if [[ -n "${CLONE_DIR:-}" ]]; then rm -rf -- "$CLONE_DIR"; fi' EXIT
+    clone_args=(clone --depth 1)
+    if [[ -n "$BRANCH" ]]; then
+        clone_args+=(--branch "$BRANCH" --single-branch)
+    fi
+    git "${clone_args[@]}" "$REPO_URL" "$CLONE_DIR/source"
+    SOURCE_DIR="$CLONE_DIR/source"
+    [[ -f "$SOURCE_DIR/app.py" && -f "$SOURCE_DIR/requirements.txt" ]] \
+        || fail "Repository root must contain app.py and requirements.txt."
 fi
 
 step "Creating service account $SERVICE_USER"
@@ -102,7 +142,7 @@ sudo -u "$SERVICE_USER" "$APP_DIR/.venv/bin/pip" install --quiet -r "$APP_DIR/re
 
 GENERATED_PASSWORD=""
 if [[ -f "$APP_DIR/.env" ]]; then
-    step "Keeping existing .env"
+    step "Keeping existing secrets and credentials in .env"
 else
     step "Generating .env with fresh keys"
     sudo -u "$SERVICE_USER" env DOMAIN="$DOMAIN" TLS="$ENABLE_TLS" PORT="$BIND_PORT" \
@@ -128,6 +168,58 @@ target.write_text(
 PY
     GENERATED_PASSWORD="$(grep '^DEFAULT_PASSWORD=' "$APP_DIR/.env" | cut -d= -f2-)"
 fi
+"$APP_DIR/.venv/bin/python" - "$APP_DIR/.env" "$DOMAIN" "$ENABLE_TLS" "$BIND_PORT" <<'PY'
+import os
+import sys
+import tempfile
+from pathlib import Path
+
+target = Path(sys.argv[1])
+domain, tls, port = sys.argv[2:]
+lines = target.read_text(encoding='utf-8').splitlines()
+allowed_hosts = []
+for line in lines:
+    if '=' in line and not line.lstrip().startswith('#'):
+        key, value = line.split('=', 1)
+        if key.strip() == 'ALLOWED_HOSTS':
+            allowed_hosts.extend(host.strip() for host in value.split(',') if host.strip())
+if domain.lower() not in {host.lower() for host in allowed_hosts}:
+    allowed_hosts.append(domain)
+
+values = {
+    'ALLOWED_HOSTS': ','.join(allowed_hosts),
+    'BIND_HOST': '127.0.0.1',
+    'BIND_PORT': port,
+}
+if tls == 'yes':
+    values['SESSION_COOKIE_SECURE'] = 'true'
+
+updated = set()
+new_lines = []
+for line in lines:
+    key = line.split('=', 1)[0].strip() if '=' in line and not line.lstrip().startswith('#') else ''
+    if key in values:
+        new_lines.append(f'{key}={values[key]}')
+        updated.add(key)
+    else:
+        new_lines.append(line)
+for key, value in values.items():
+    if key not in updated:
+        new_lines.append(f'{key}={value}')
+
+fd, temporary = tempfile.mkstemp(prefix='.env.', dir=target.parent)
+try:
+    with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+        stream.write('\n'.join(new_lines) + '\n')
+    os.chmod(temporary, 0o600)
+    os.replace(temporary, target)
+except BaseException:
+    try:
+        os.unlink(temporary)
+    except FileNotFoundError:
+        pass
+    raise
+PY
 chown "$SERVICE_USER":"$SERVICE_USER" "$APP_DIR/.env"
 chmod 600 "$APP_DIR/.env"
 

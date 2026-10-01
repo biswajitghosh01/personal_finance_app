@@ -29,13 +29,13 @@ RuntimeError: Missing .env. Start the application with ./setup.sh
 | `__pycache__/`, `*.pyc`                              | Byte-compiled Python                                                                       | Python                    | Automatic         |
 | `*.log`                                              | Local log output                                                                           | Runtime                   | Automatic         |
 
-`.env` and `instance/finance.db` are a matched pair. `DATA_KEY` encrypts account references inside the database, so a database restored alongside a different `DATA_KEY` cannot be decrypted. Always back up both together.
+`.env` and `instance/finance.db` are a matched pair. `DATA_KEY` encrypts account references inside the database, so a database restored alongside a different `DATA_KEY` cannot be decrypted. Always back up both together. Setup never replaces an existing `.env`; if its required settings are missing or invalid, preserve the file and repair it deliberately rather than generating a new key against an existing database.
 
 ## Recreating the ignored files
 
 ### Option 1: let setup.sh do everything
 
-`setup.sh` is idempotent and performs every step below. It creates `.venv`, installs requirements, sets `umask 077`, writes `.env` only if absent, creates `instance/` with mode `700`, and starts the application, which then builds the database.
+`setup.sh` is idempotent and performs every step below. It creates or validates `.venv`, installs requirements with that environment's Python, sets `umask 077`, writes `.env` atomically only if absent, protects `.env` and `instance/`, and starts the application with the same virtual-environment interpreter. An existing `.env` and database are preserved. An incomplete `.venv` is moved aside as `.venv.invalid-<timestamp>` before a new one is created.
 
 ```bash
 chmod +x setup.sh
@@ -43,6 +43,20 @@ chmod +x setup.sh
 ```
 
 An existing `.env` is never overwritten, so it is safe to re-run after a dependency change.
+
+To select a particular Python installation, set `PYTHON_BIN` when starting setup:
+
+```bash
+PYTHON_BIN="$(command -v python3)" ./setup.sh
+```
+
+If the default port is already in use, choose another one without editing the app:
+
+```bash
+BIND_PORT=5556 ./setup.sh
+```
+
+Incomplete virtual environments are preserved under `.venv.invalid-<timestamp>`. These backups, virtual environments, secrets, databases, Python caches, and logs are excluded by `.gitignore`.
 
 ### Option 2: create each file manually
 
@@ -151,14 +165,28 @@ Tested on Ubuntu 24.04 LTS. Adjust package commands for other distributions.
 
 `deploy.sh` updates Ubuntu packages and performs the host-side deployment: required system packages, service account, virtual environment, `.env` with freshly generated keys, the systemd unit, Nginx, the firewall, and a TLS certificate. It supports a domain name or a public IPv4 address. DNS (when using a domain) and the cloud provider's network security group must be configured beforehand.
 
-Before running the script, point an A record for your domain at the server's public IP and allow inbound SSH (22), HTTP (80), and HTTPS (443) in the cloud provider's network security group. The script configures the host firewall, but the provider-level rule must be set in the cloud console.
+Before running the script with a domain name, point its DNS A record at the server's public IPv4 address. Pass only the hostname to `--domain` (for example `finance.example.com`), not `https://` or a URL path. Also allow inbound SSH (22), HTTP (80), and HTTPS (443) in the cloud provider's network security group/security list. Port 80 is required for Let's Encrypt HTTP-01 issuance and renewal. The script configures UFW, but it cannot configure the provider firewall or subnet route table.
 
-Create `/root/secure_finance_app` on the server and place the project files directly inside it. In particular, `app.py`, `requirements.txt`, and `deploy.sh` should be at `/root/secure_finance_app/`, not inside another nested project directory. The script copies that source folder to `/opt/finance/app` by default; use `--app-dir` to choose another runtime install location.
+For local-folder deployment, create `/root/secure_finance_app` on the server and place the project files directly inside it. In particular, `app.py`, `requirements.txt`, and `deploy.sh` should be at `/root/secure_finance_app/`, not inside another nested project directory. The script copies that source folder to `/opt/finance/app` by default; use `--app-dir` to choose another runtime install location.
 
 ```bash
 cd /root/secure_finance_app
 sudo ./deploy.sh --domain finance.example.com --email you@example.com
 ```
+
+This domain-name form uses Let's Encrypt domain validation. The script configures Nginx for the hostname and adds it to `ALLOWED_HOSTS`. If rerun on an existing IP deployment, it preserves `.env` secrets and credentials while adding the new hostname, and enables secure session cookies for TLS.
+
+Alternatively, let the script clone a Git repository URL. The repository root must contain `app.py` and `requirements.txt`; `deploy.sh` itself does not need to come from that repository:
+
+```bash
+sudo ./deploy.sh \
+    --domain finance.example.com \
+    --repo-url https://github.com/your-account/your-repository.git \
+    --branch main \
+    --email you@example.com
+```
+
+Omit `--branch` to use the repository's default branch. For a private repository, configure a deploy key or other Git authentication for the root account running the script. Do not put access tokens or passwords in the repository URL or shell history.
 
 For IP-only access with browser-trusted TLS, pass the server's public IPv4 address instead. Allow inbound ports 80 and 443 in the cloud security group; port 80 is needed for certificate issuance and renewal. IP certificates use a short-lived profile and Certbot renews them automatically, so do not disable its renewal timer.
 
@@ -168,18 +196,52 @@ sudo ./deploy.sh --domain 203.0.113.10 --email you@example.com
 
 Options:
 
-| Flag                | Effect                                              |
-| ------------------- | --------------------------------------------------- |
-| `--domain <fqdn>`   | Required. Public hostname or IPv4 served over HTTPS |
-| `--email <address>` | Contact address for Let's Encrypt registration      |
-| `--no-tls`          | Skip certbot and serve plain HTTP on port 80        |
-| `--no-firewall`     | Skip UFW configuration                              |
-| `--port <number>`   | Loopback port for the application, default 5555     |
-| `--app-dir <path>`  | Install location, default `/opt/finance/app`        |
+- `--domain <fqdn-or-ipv4>`: Required. Public hostname or IPv4 served over HTTPS.
+- `--email <address>`: Contact address for Let's Encrypt registration.
+- `--repo-url <url>`: Clone source from a Git repository instead of using files beside `deploy.sh`.
+- `--branch <name>`: Branch to clone; requires `--repo-url`, otherwise the default branch is used.
+- `--no-tls`: Skip certbot and serve plain HTTP on port 80.
+- `--no-firewall`: Skip UFW configuration.
+- `--port <number>`: Loopback port for the application, default 5555.
+- `--app-dir <path>`: Install location, default `/opt/finance/app`.
 
 On success the script prints the site URL and a randomly generated first-login password, shown once. Sign in as `admin` and change it immediately.
 
-The script is idempotent. Re-running it upgrades dependencies and rewrites the service and Nginx configuration, but never overwrites an existing `.env` or database, so it is safe to use for redeployments.
+The script is idempotent. Re-running it upgrades dependencies and rewrites the service and Nginx configuration, but never overwrites an existing `.env` or database. To publish code changes, either copy updated project files directly into `/root/secure_finance_app` and rerun `sudo ./deploy.sh --domain <your-domain-or-public-ip>`, or rerun with `--repo-url <git-url>` and optionally `--branch <name>`. Both modes copy the source to `/opt/finance/app` and restart the service. The base template versions the stylesheet URL to avoid stale browser CSS; the template itself still requires redeployment.
+
+### Deployment troubleshooting
+
+#### IP-address TLS validation
+
+For browser-trusted TLS using a public IPv4 address, use the one-command `deploy.sh` flow. It requests a short-lived IP certificate with Certbot's `shortlived` profile. Keep Certbot's renewal timer enabled and allow public inbound TCP 80 and 443 in the cloud firewall; TCP 22 is needed for SSH. A domain-based certificate requires the domain's A record to point at the server.
+
+Test the challenge webroot locally and from a different machine before retrying Certbot:
+
+```bash
+sudo install -d -m 755 /var/www/letsencrypt/.well-known/acme-challenge
+printf 'probe\n' | sudo tee /var/www/letsencrypt/.well-known/acme-challenge/probe >/dev/null
+sudo chmod 644 /var/www/letsencrypt/.well-known/acme-challenge/probe
+curl -i -H 'Host: 203.0.113.10' http://127.0.0.1/.well-known/acme-challenge/probe
+curl -i http://203.0.113.10/.well-known/acme-challenge/probe
+```
+
+Replace `203.0.113.10` with the server's public IP. Both requests must return `200` and `probe`. A local `403` means Nginx cannot read or traverse the challenge path; the current `deploy.sh` sets those permissions and runs Certbot with a webroot-specific `umask 022`. If local access succeeds but external access cannot connect, inspect the cloud ingress rules, public subnet route to an Internet Gateway, and host packet-filter rules. `ufw status` alone may not show an earlier firewall rule that takes precedence.
+
+On Ubuntu cloud images, inspect packet arrival and INPUT rule ordering with:
+
+```bash
+sudo tcpdump -nni any 'tcp port 80'
+sudo iptables -nvL INPUT --line-numbers
+```
+
+If a catch-all `REJECT` appears before the UFW rules, UFW's later port-80 allow does not take effect. In the observed OCI image, the early reject followed the SSH allow; after confirming that same ordering, these temporary runtime rules allowed the ACME request and HTTPS traffic:
+
+```bash
+sudo iptables -I INPUT 5 -p tcp --dport 80 -m conntrack --ctstate NEW -j ACCEPT
+sudo iptables -I INPUT 6 -p tcp --dport 443 -m conntrack --ctstate NEW -j ACCEPT
+```
+
+These rules do not survive reboot. Correct the persistent firewall configuration that installs the early reject; do not save rules blindly if another firewall manager owns them. A TCP SYN visible in `tcpdump` without a SYN-ACK indicates the block is at the host firewall; no SYN indicates an upstream network rule or route problem.
 
 ### Configuration used by a public deployment
 
@@ -210,7 +272,7 @@ sudo ufw allow 'Nginx Full'
 sudo ufw enable
 ```
 
-Port 5555 is deliberately absent; the app is reachable only through Nginx. In your cloud provider's network security group, open **443** and **22** only.
+Port 5555 is deliberately absent; the app is reachable only through Nginx. In your cloud provider's network security group, allow **22**, **80**, and **443**; port 80 is required by the HTTP-01 certificate challenge.
 
 #### 2. Create a dedicated service account
 

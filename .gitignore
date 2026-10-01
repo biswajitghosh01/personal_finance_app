@@ -7,5 +7,12 @@ instance/finance(2).db-wal
 instance/finance(1).db-shm
 instance/finance(3).db-wal
 .env
+.env.*
+.venv/
+.venv.invalid-*/
+__pycache__/
+*.py[cod]
+*.log
+instance/
 __pycache__/admin_routes.cpython-314.pyc
 instance/finance(3).db-shm
