@@ -12,7 +12,7 @@
     />
     <link
       rel="stylesheet"
-      href="{{ url_for('static', filename='style.css', v=5) }}"
+      href="{{ url_for('static', filename='style.css', v=6) }}"
     />
     {% block styles %}{% endblock %}
   </head>
@@ -143,10 +143,17 @@
           {% endfor %} {% block content %}{% endblock %}
         </main>
 
-        <footer>Private finance tracking on localhost</footer>
+        <footer>
+          Made with
+          <span class="heart-white heart-white--glow">&#9829;</span> by
+          Biswajitt
+        </footer>
       </div>
     </div>
-
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css', v=14) }}"
+    />
     <script src="{{ url_for('static', filename='app.js') }}" defer></script>
     {% block scripts %}{% endblock %}
   </body>

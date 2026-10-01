@@ -9,19 +9,25 @@ Deposits{% endblock %} {% block styles %}
   rel="stylesheet"
   href="{{ url_for('static', filename='portfolio_summary.css') }}"
 />
-{% endblock %} {% block content %} {% set summary = namespace(values={}) %} {%
-for row in rows %} {% set code = row['currency'] %} {% set v =
-row['initial_deposit']|float %} {% if code not in summary.values %} {% set _ =
-summary.values.update({code: {'current': v, 'count': 1}}) %} {% else %} {% set _
-= summary.values[code].update({ 'current': summary.values[code]['current'] + v,
-'count': summary.values[code]['count'] + 1 }) %} {% endif %} {% endfor %}
+{% endblock %} {% block content %} {# Aggregate per-currency totals for the
+summary cards #} {% set summary = namespace(values={}) %} {% for row in rows %}
+{% set code = row['currency'] %} {% set invested = row['initial_deposit']|float
+%} {% set maturity = row['maturity']|float %} {% if code not in summary.values
+%} {% set _ = summary.values.update({ code: {'invested': invested, 'maturity':
+maturity, 'count': 1} }) %} {% else %} {% set _ = summary.values[code].update({
+'invested': summary.values[code]['invested'] + invested, 'maturity':
+summary.values[code]['maturity'] + maturity, 'count':
+summary.values[code]['count'] + 1 }) %} {% endif %} {% endfor %}
 
 <div class="portfolio-page">
   <section class="page-intro">
     <div>
       <span class="eyebrow">FIXED DEPOSITS</span>
       <h1>Fixed Deposits</h1>
-      <p>View deposit balances and manage records.</p>
+      <p>
+        Track each deposit's principal, rate, tenure, and approximate maturity
+        value.
+      </p>
     </div>
     <a class="button" href="{{ url_for('fixed_deposit_new') }}"
       >Add Fixed Deposit</a
@@ -30,33 +36,53 @@ summary.values.update({code: {'current': v, 'count': 1}}) %} {% else %} {% set _
 
   {% if summary.values %}
   <section class="summary-cards" aria-label="Fixed deposit summary">
-    {% for code, total in summary.values.items() %} {{ summary_card(
-    label='Fixed deposit value', currency=code, current=total['current'],
-    count=total['count'], accent='gold' ) }} {% endfor %}
+    {% for code, total in summary.values.items() %} {% set interest =
+    total['maturity'] - total['invested'] %} {% set pct = (interest /
+    total['invested'] * 100) if total['invested'] else 0 %} {{ summary_card(
+    label='Maturity value (approx.)', currency=code, current=total['maturity'],
+    invested=total['invested'], pnl=interest, pct=pct, count=total['count'],
+    accent='gold' ) }} {% endfor %}
   </section>
   {% else %}
   <section class="summary-empty">
     <strong>No fixed deposits yet</strong>
-    <p>Add a fixed deposit to begin tracking balances.</p>
+    <p>Add a fixed deposit to begin tracking balances and maturity value.</p>
   </section>
   {% endif %}
 
   <section class="panel data-panel">
     <div class="table-wrap">
-      <table>
+      <table class="fd-table">
+        <colgroup>
+          <col class="col-id" />
+          <col class="col-bank" />
+          <col class="col-money" />
+          <col class="col-rate" />
+          <col class="col-tenure" />
+          <col class="col-money" />
+          <col class="col-money" />
+          <col class="col-date" />
+          <col class="col-actions" />
+        </colgroup>
         <thead>
           <tr>
-            <th>ID</th>
-            <th>Bank</th>
-            <th>Balance</th>
-            <th>Actions</th>
+            <th class="fd-id">ID</th>
+            <th class="fd-bank">Bank</th>
+            <th class="fd-money">Principal</th>
+            <th class="fd-rate">Rate</th>
+            <th class="fd-tenure">Tenure</th>
+            <th class="fd-money">Interest</th>
+            <th class="fd-money">Maturity (approx.)</th>
+            <th class="fd-date">Matures</th>
+            <th class="fd-actions">Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for row in rows %}
           <tr>
-            <td>#{{ row.display_id }}</td>
-            <td>
+            <td class="fd-id">#{{ row.display_id }}</td>
+
+            <td class="fd-bank">
               <a
                 class="record-link"
                 href="{{ url_for('fixed_deposit_edit', deposit_id=row.id) }}"
@@ -64,17 +90,57 @@ summary.values.update({code: {'current': v, 'count': 1}}) %} {% else %} {% set _
                 <strong>{{ row.bank_name }}</strong>
               </a>
             </td>
-            <td class="money">
+
+            <td class="fd-money money">
               {{ currency_symbol(row.currency) }} {{
               '{:,.2f}'.format(row.initial_deposit|float) }}
             </td>
-            <td class="action-buttons">
+
+            <td class="fd-rate">
+              {{ '%.2f'|format(row.interest_rate|float) }}%
+            </td>
+
+            <td class="fd-tenure">
+              {% if row.tenure_months >= 12 %} {{ (row.tenure_months // 12) }}y
+              {{ (row.tenure_months % 12) }}m {% else %} {{ row.tenure_months
+              }}m {% endif %}
+            </td>
+
+            <td class="fd-money money positive">
+              +{{ currency_symbol(row.currency) }} {{
+              '{:,.2f}'.format(row.interest|float) }}
+            </td>
+
+            <td class="fd-money money">
+              {{ currency_symbol(row.currency) }} {{
+              '{:,.2f}'.format(row.maturity|float) }}
+            </td>
+
+            <td class="fd-date">{{ row.maturity_date }}</td>
+
+            <td class="fd-actions">
               <a
                 class="icon-button edit"
                 href="{{ url_for('fixed_deposit_edit', deposit_id=row.id) }}"
                 >Edit</a
               >
+              <form
+                method="post"
+                action="{{ url_for('fixed_deposit_delete', deposit_id=row.id) }}"
+                class="fd-actions-form"
+              >
+                <input
+                  type="hidden"
+                  name="csrf_token"
+                  value="{{ csrf_token() }}"
+                />
+                <button class="icon-button danger" type="submit">Delete</button>
+              </form>
             </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="9" class="empty-state">No fixed deposits yet.</td>
           </tr>
           {% endfor %}
         </tbody>

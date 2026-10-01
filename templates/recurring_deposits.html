@@ -11,11 +11,11 @@ Deposits{% endblock %} {% block styles %}
 />
 {% endblock %} {% block content %} {% set summary = namespace(values={}) %} {%
 for row in rows %} {% set code = row['currency'] %} {% set invested =
-row['amount_invested']|float %} {% set current = row['current_value']|float %}
-{% if code not in summary.values %} {% set _ = summary.values.update({code:
-{'invested': invested, 'current': current, 'count': 1}}) %} {% else %} {% set _
-= summary.values[code].update({ 'invested': summary.values[code]['invested'] +
-invested, 'current': summary.values[code]['current'] + current, 'count':
+row['amount_invested']|float %} {% set maturity = row['maturity']|float %} {% if
+code not in summary.values %} {% set _ = summary.values.update({ code:
+{'invested': invested, 'maturity': maturity, 'count': 1} }) %} {% else %} {% set
+_ = summary.values[code].update({ 'invested': summary.values[code]['invested'] +
+invested, 'maturity': summary.values[code]['maturity'] + maturity, 'count':
 summary.values[code]['count'] + 1 }) %} {% endif %} {% endfor %}
 
 <div class="portfolio-page">
@@ -23,7 +23,7 @@ summary.values[code]['count'] + 1 }) %} {% endif %} {% endfor %}
     <div>
       <span class="eyebrow">BANK DEPOSITS</span>
       <h1>Recurring Deposits</h1>
-      <p>Track contributions, current value, and maturity.</p>
+      <p>Track monthly contributions, tenure, interest, and maturity value.</p>
     </div>
     <a class="button" href="{{ url_for('recurring_deposit_new') }}"
       >+ Add Record</a
@@ -32,39 +32,54 @@ summary.values[code]['count'] + 1 }) %} {% endif %} {% endfor %}
 
   {% if summary.values %}
   <section class="summary-cards" aria-label="Recurring deposit summary">
-    {% for code, total in summary.values.items() %} {% set pnl =
-    total['current'] - total['invested'] %} {% set pct = (pnl /
+    {% for code, total in summary.values.items() %} {% set gain =
+    total['maturity'] - total['invested'] %} {% set pct = (gain /
     total['invested'] * 100) if total['invested'] else 0 %} {{ summary_card(
-    label='Recurring deposit value', currency=code, current=total['current'],
-    invested=total['invested'], pnl=pnl, pct=pct, count=total['count'] ) }} {%
-    endfor %}
+    label='Maturity value (approx.)', currency=code, current=total['maturity'],
+    invested=total['invested'], pnl=gain, pct=pct, count=total['count'],
+    accent='cyan' ) }} {% endfor %}
   </section>
   {% else %}
   <section class="summary-empty">
     <strong>No recurring deposits yet</strong>
-    <p>Add a recurring deposit to begin tracking performance.</p>
+    <p>Add a recurring deposit to begin tracking contributions and maturity.</p>
   </section>
   {% endif %}
 
   <section class="panel data-panel">
     <div class="table-wrap">
-      <table>
+      <table class="rd-table">
+        <colgroup>
+          <col class="col-id" />
+          <col class="col-bank" />
+          <col class="col-money" />
+          <col class="col-money" />
+          <col class="col-rate" />
+          <col class="col-tenure" />
+          <col class="col-money" />
+          <col class="col-money" />
+          <col class="col-date" />
+          <col class="col-actions" />
+        </colgroup>
         <thead>
           <tr>
-            <th>ID</th>
-            <th>Bank</th>
-            <th>Monthly</th>
-            <th>Invested</th>
-            <th>Current</th>
-            <th>Maturity</th>
-            <th>Actions</th>
+            <th class="rd-id">ID</th>
+            <th class="rd-bank">Bank</th>
+            <th class="rd-money">Monthly</th>
+            <th class="rd-money">Invested</th>
+            <th class="rd-rate">Rate</th>
+            <th class="rd-tenure">Tenure</th>
+            <th class="rd-money">Interest</th>
+            <th class="rd-money">Maturity (approx.)</th>
+            <th class="rd-date">Matures</th>
+            <th class="rd-actions">Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for row in rows %}
           <tr>
-            <td>#{{ row.display_id }}</td>
-            <td>
+            <td class="rd-id">#{{ row.display_id }}</td>
+            <td class="rd-bank">
               <a
                 class="record-link"
                 href="{{ url_for('recurring_deposit_edit', deposit_id=row.id) }}"
@@ -72,26 +87,54 @@ summary.values[code]['count'] + 1 }) %} {% endif %} {% endfor %}
                 <strong>{{ row.bank_name }}</strong>
               </a>
             </td>
-            <td class="money">
+            <td class="rd-money money">
               {{ currency_symbol(row.currency) }} {{
               '{:,.2f}'.format(row.monthly_deposit|float) }}
             </td>
-            <td class="money">
+            <td class="rd-money money">
               {{ currency_symbol(row.currency) }} {{
               '{:,.2f}'.format(row.amount_invested|float) }}
             </td>
-            <td class="money">
-              {{ currency_symbol(row.currency) }} {{
-              '{:,.2f}'.format(row.current_value|float) }}
+            <td class="rd-rate">
+              {{ '%.2f'|format(row.interest_rate|float) }}%
             </td>
-            <td>{{ row.maturity_date }}</td>
-            <td class="action-buttons">
+            <td class="rd-tenure">
+              {% if row.tenure_months >= 12 %} {{ (row.tenure_months // 12) }}y
+              {{ (row.tenure_months % 12) }}m {% else %} {{ row.tenure_months
+              }}m {% endif %}
+            </td>
+            <td class="rd-money money positive">
+              +{{ currency_symbol(row.currency) }} {{
+              '{:,.2f}'.format(row.gain|float) }}
+            </td>
+            <td class="rd-money money">
+              {{ currency_symbol(row.currency) }} {{
+              '{:,.2f}'.format(row.maturity|float) }}
+            </td>
+            <td class="rd-date">{{ row.maturity_date }}</td>
+            <td class="rd-actions">
               <a
                 class="icon-button edit"
                 href="{{ url_for('recurring_deposit_edit', deposit_id=row.id) }}"
                 >Edit</a
               >
+              <form
+                method="post"
+                action="{{ url_for('recurring_deposit_delete', deposit_id=row.id) }}"
+                class="rd-actions-form"
+              >
+                <input
+                  type="hidden"
+                  name="csrf_token"
+                  value="{{ csrf_token() }}"
+                />
+                <button class="icon-button danger" type="submit">Delete</button>
+              </form>
             </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="10" class="empty-state">No recurring deposits yet.</td>
           </tr>
           {% endfor %}
         </tbody>

@@ -927,6 +927,48 @@ def bank_account_delete(account_id):
     flash('Bank account deleted.', 'success')
     return redirect(url_for('bank_accounts'))
 
+
+# ---------------------------------------------------------------- Fixed Deposits
+
+def _fd_metrics(row):
+    """
+    Tenure, interest earned, and approximate maturity for a Fixed Deposit.
+    Uses quarterly compounding — the Indian banking default.
+    """
+    principal = Decimal(str(row['initial_deposit'] or '0'))
+    rate_pct = Decimal(str(row['interest_rate'] or '0'))
+
+    try:
+        start = datetime.strptime(row['investment_date'], '%Y-%m-%d').date()
+        end = datetime.strptime(row['maturity_date'], '%Y-%m-%d').date()
+        days = max((end - start).days, 0)
+    except (TypeError, ValueError):
+        days = 0
+
+    years = Decimal(days) / Decimal('365')
+    months = round(days / 30.4375)
+
+    if principal <= 0 or rate_pct <= 0 or years <= 0:
+        maturity = principal
+        interest = Decimal('0')
+    else:
+        r = rate_pct / Decimal('100')
+        n = Decimal('4')
+        base = Decimal('1') + (r / n)
+        exponent = n * years
+        maturity = principal * Decimal(str(float(base) ** float(exponent)))
+        interest = maturity - principal
+
+    return {
+        'principal': float(principal),
+        'interest': float(interest),
+        'maturity': float(maturity),
+        'tenure_days': days,
+        'tenure_months': months,
+        'tenure_years': float(years),
+    }
+
+
 @app.route('/fixed-deposits')
 @login_required
 def fixed_deposits():
@@ -938,6 +980,7 @@ def fixed_deposits():
     for index, row in enumerate(rows, start=1):
         item = dict(row)
         item['display_id'] = index
+        item.update(_fd_metrics(row))
         display_rows.append(item)
     return render_template('fixed_deposits.html', rows=display_rows)
 
@@ -996,6 +1039,51 @@ def fixed_deposit_delete(deposit_id):
     flash('Fixed deposit deleted.', 'success')
     return redirect(url_for('fixed_deposits'))
 
+
+# ---------------------------------------------------------------- Recurring Deposits
+
+def _rd_metrics(row):
+    """
+    Tenure, gain, and approximate maturity for a Recurring Deposit.
+    Uses the ordinary-annuity-due future value with monthly compounding
+    — matches most Indian bank RD calculators to within a few rupees.
+    """
+    monthly = Decimal(str(row['monthly_deposit'] or '0'))
+    rate_pct = Decimal(str(row['interest_rate'] or '0'))
+
+    try:
+        start = datetime.strptime(row['start_date'], '%Y-%m-%d').date()
+        end = datetime.strptime(row['maturity_date'], '%Y-%m-%d').date()
+        days = max((end - start).days, 0)
+    except (TypeError, ValueError):
+        days = 0
+
+    months = max(round(days / 30.4375), 0)
+    invested = Decimal(str(row['amount_invested'] or '0'))
+
+    if monthly <= 0 or rate_pct <= 0 or months <= 0:
+        maturity = invested
+        gain = Decimal('0')
+    else:
+        i = rate_pct / Decimal('100') / Decimal('12')
+        n = Decimal(months)
+        base = Decimal('1') + i
+        growth = Decimal(str(float(base) ** float(n)))
+        fv = monthly * ((growth - Decimal('1')) / i) * base
+        maturity = fv
+        gain = maturity - invested
+
+    return {
+        'monthly': float(monthly),
+        'invested': float(invested),
+        'gain': float(gain),
+        'maturity': float(maturity),
+        'tenure_days': days,
+        'tenure_months': months,
+        'tenure_years': float(Decimal(days) / Decimal('365')),
+    }
+
+
 @app.route('/recurring-deposits')
 @login_required
 def recurring_deposits():
@@ -1007,6 +1095,7 @@ def recurring_deposits():
     for index, row in enumerate(rows, start=1):
         item = dict(row)
         item['display_id'] = index
+        item.update(_rd_metrics(row))
         display_rows.append(item)
     return render_template('recurring_deposits.html', rows=display_rows)
 
@@ -1089,6 +1178,8 @@ def recurring_deposit_delete(deposit_id):
     audit('RECURRING_DEPOSIT_DELETE', deposit_id)
     return redirect(url_for('recurring_deposits'))
 
+
+# ---------------------------------------------------------------- Stocks
 @app.route('/stocks')
 @login_required
 def stocks():

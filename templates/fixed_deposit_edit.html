@@ -2,21 +2,141 @@
 {% set is_edit = deposit_id is defined and deposit_id %}
 {% block title %}{{ 'Edit' if is_edit else 'Add' }} Fixed Deposit{% endblock %}
 {% block page_heading %}Fixed Deposits{% endblock %}
+
 {% block content %}
-<section class="page-intro"><div><span class="eyebrow">{{ 'EDIT RECORD' if is_edit else 'NEW RECORD' }}</span><h1>{{ 'Edit' if is_edit else 'Add' }} Fixed Deposit</h1><p>{{ 'Update the fixed deposit and account details.' if is_edit else 'Enter the fixed deposit details.' }}</p></div><a class="button secondary" href="{{ url_for('fixed_deposits') }}">Cancel</a></section>
-<form method="post" class="panel form-grid">
-<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-<label>Bank Name<input name="bank_name" maxlength="120" value="{{ deposit['bank_name']|default('', true) }}" required></label>
-<label>Account Number<input name="account_number" maxlength="80" value="{{ deposit['account_number']|default('', true) }}" required autocomplete="off" spellcheck="false"></label>
-<label>IFSC Code<input name="ifsc_code" maxlength="11" value="{{ deposit['ifsc_code']|default('', true) }}" required></label>
-<label>MICR Code<input name="micr_code" maxlength="9" value="{{ deposit['micr_code']|default('', true) }}" required></label>
-<label>Initial Deposit<input type="number" step="0.01" min="0" name="initial_deposit" value="{{ deposit['initial_deposit']|default('0', true) }}" required></label>
-<label>Currency<select name="currency" required>{% for item in currencies %}<option value="{{ item }}" {% if deposit['currency']|default('INR', true) == item %}selected{% endif %}>{{ currency_symbol(item) }} {{ item }}</option>{% endfor %}</select></label>
-<label>Investment Date<input type="date" name="investment_date" value="{{ deposit['investment_date']|default('', true) }}" required></label>
-<label>Maturity Date<input type="date" name="maturity_date" value="{{ deposit['maturity_date']|default('', true) }}" required></label>
-<label>Interest Rate (%)<input type="number" step="any" min="0" name="interest_rate" value="{{ deposit['interest_rate']|default('0', true) }}" required></label>
-<label class="full">Bank Address<textarea name="bank_address" maxlength="1000" required>{{ deposit['bank_address']|default('', true) }}</textarea></label>
-<label class="full">Notes<textarea name="notes" maxlength="1000">{{ deposit['notes']|default('', true) }}</textarea></label>
-<div class="full form-actions"><a class="button secondary" href="{{ url_for('fixed_deposits') }}">Cancel</a><button type="submit">{{ 'Update' if is_edit else 'Save' }} Fixed Deposit</button></div>
+<section class="page-intro">
+  <div>
+    <span class="eyebrow">{{ 'EDIT RECORD' if is_edit else 'NEW RECORD' }}</span>
+    <h1>{{ 'Edit' if is_edit else 'Add' }} Fixed Deposit</h1>
+    <p>{{ 'Update the fixed deposit and account details.' if is_edit else 'Enter the fixed deposit details.' }}</p>
+  </div>
+  <a class="button secondary" href="{{ url_for('fixed_deposits') }}">Cancel</a>
+</section>
+
+<form method="post" class="panel form-grid" id="fd-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <label>Bank Name<input name="bank_name" maxlength="120" value="{{ deposit['bank_name']|default('', true) }}" required></label>
+  <label>Account Number<input name="account_number" maxlength="80" value="{{ deposit['account_number']|default('', true) }}" required autocomplete="off" spellcheck="false"></label>
+  <label>IFSC Code<input name="ifsc_code" maxlength="11" value="{{ deposit['ifsc_code']|default('', true) }}" required></label>
+  <label>MICR Code<input name="micr_code" maxlength="9" value="{{ deposit['micr_code']|default('', true) }}" required></label>
+
+  <label>
+    Initial Deposit
+    <input type="number" step="0.01" min="0" name="initial_deposit" id="fd_principal"
+           value="{{ deposit['initial_deposit']|default('0', true) }}" required>
+  </label>
+
+  <label>
+    Currency
+    <select name="currency" id="fd_currency" required>
+      {% for item in currencies %}
+      <option value="{{ item }}" {% if deposit['currency']|default('INR', true) == item %}selected{% endif %}>
+        {{ currency_symbol(item) }} {{ item }}
+      </option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label>Investment Date<input type="date" name="investment_date" id="fd_start" value="{{ deposit['investment_date']|default('', true) }}" required></label>
+  <label>Maturity Date<input type="date" name="maturity_date" id="fd_end" value="{{ deposit['maturity_date']|default('', true) }}" required></label>
+
+  <label>
+    Interest Rate (%)
+    <input type="number" step="any" min="0" name="interest_rate" id="fd_rate"
+           value="{{ deposit['interest_rate']|default('0', true) }}" required>
+  </label>
+
+  <label>
+    Tenure
+    <input class="calculated" id="fd_tenure" value="—" readonly>
+    <small class="field-hint">Derived from the two dates above.</small>
+  </label>
+
+  <label>
+    Approx. Interest Earned
+    <input class="calculated positive" id="fd_interest" value="0.00" readonly>
+  </label>
+
+  <label>
+    Approx. Maturity Amount
+    <input class="calculated" id="fd_maturity" value="0.00" readonly>
+    <small class="field-hint">Quarterly compounding; actual bank figure may differ slightly.</small>
+  </label>
+
+  <label class="full">Bank Address<textarea name="bank_address" maxlength="1000" required>{{ deposit['bank_address']|default('', true) }}</textarea></label>
+  <label class="full">Notes<textarea name="notes" maxlength="1000">{{ deposit['notes']|default('', true) }}</textarea></label>
+
+  <div class="full form-actions">
+    <a class="button secondary" href="{{ url_for('fixed_deposits') }}">Cancel</a>
+    <button type="submit">{{ 'Update' if is_edit else 'Save' }} Fixed Deposit</button>
+  </div>
 </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const principalInput = document.getElementById('fd_principal');
+  const rateInput      = document.getElementById('fd_rate');
+  const startInput     = document.getElementById('fd_start');
+  const endInput       = document.getElementById('fd_end');
+  const currencySelect = document.getElementById('fd_currency');
+  const tenureOut      = document.getElementById('fd_tenure');
+  const interestOut    = document.getElementById('fd_interest');
+  const maturityOut    = document.getElementById('fd_maturity');
+
+  function formatMoney(v) {
+    return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function symbol() {
+    return currencySelect.options[currencySelect.selectedIndex].text.trim().split(' ')[0];
+  }
+
+  function recompute() {
+    const principal = parseFloat(principalInput.value) || 0;
+    const ratePct   = parseFloat(rateInput.value) || 0;
+    const startVal  = startInput.value;
+    const endVal    = endInput.value;
+
+    if (!startVal || !endVal) {
+      tenureOut.value = '—';
+      interestOut.value = '0.00';
+      maturityOut.value = '0.00';
+      return;
+    }
+
+    const days = Math.max(0, Math.round((new Date(endVal) - new Date(startVal)) / 86400000));
+    const years = days / 365;
+    const months = Math.round(days / 30.4375);
+
+    tenureOut.value = months >= 12
+      ? `${Math.floor(months / 12)}y ${months % 12}m (${days} days)`
+      : `${months}m (${days} days)`;
+
+    if (principal <= 0 || ratePct <= 0 || years <= 0) {
+      interestOut.value = '0.00';
+      maturityOut.value = formatMoney(principal);
+      return;
+    }
+
+    const r = ratePct / 100;
+    const n = 4;                                  // quarterly
+    const maturity = principal * Math.pow(1 + r / n, n * years);
+    const interest = maturity - principal;
+
+    interestOut.value = '+' + symbol() + ' ' + formatMoney(interest);
+    maturityOut.value = symbol() + ' ' + formatMoney(maturity);
+  }
+
+  ['input', 'change'].forEach((evt) => {
+    [principalInput, rateInput, startInput, endInput, currencySelect].forEach((el) => {
+      el.addEventListener(evt, recompute);
+    });
+  });
+
+  recompute();
+})();
+</script>
 {% endblock %}

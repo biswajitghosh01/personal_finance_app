@@ -1,0 +1,72 @@
+{# ============================================================= Shared summary
+card macro. Usage: {% from '_summary_card.html' import summary_card %} {{
+summary_card( label='Mutual fund portfolio value', currency='INR',
+current=123456.78, invested=100000.00, pnl=23456.78, pct=23.46, count=5,
+accent='cyan' ) }} accent ∈ {cyan, green, pink, gold, violet}.
+============================================================= #} {% macro
+summary_card( label, currency, current, invested=None, pnl=None, pct=None,
+count=None, accent='cyan', extra_metrics=[], progress_label=None,
+progress_value=None ) %}
+<article class="summary-card accent-{{ accent }}">
+  <div class="summary-head">
+    <div>
+      <span class="kpi-label">{{ label }}</span>
+      <strong class="summary-total">
+        {{ currency_symbol(currency) }} {{ '{:,.2f}'.format(current) }}
+      </strong>
+    </div>
+    <span class="summary-currency">{{ currency }}</span>
+  </div>
+
+  <div class="summary-metrics">
+    {% if invested is not none %}
+    <div>
+      <small>Invested</small>
+      <strong
+        >{{ currency_symbol(currency) }} {{ '{:,.2f}'.format(invested)
+        }}</strong
+      >
+    </div>
+    {% endif %} {% if pnl is not none %}
+    <div>
+      <small>Unrealised P&amp;L</small>
+      <strong class="{{ 'positive' if pnl >= 0 else 'negative' }}">
+        {{ currency_symbol(currency) }} {{ '{:,.2f}'.format(pnl) }}
+      </strong>
+    </div>
+    {% endif %} {% if pct is not none %}
+    <div>
+      <small>Return</small>
+      <strong class="{{ 'positive' if pct >= 0 else 'negative' }}">
+        {{ '%.2f'|format(pct) }}%
+      </strong>
+    </div>
+    {% endif %} {% if count is not none %}
+    <div>
+      <small>Holdings</small>
+      <strong>{{ count }}</strong>
+    </div>
+    {% endif %} {% for metric in extra_metrics %}
+    <div>
+      <small>{{ metric.label }}</small>
+      <strong class="{{ metric.class or '' }}">{{ metric.value }}</strong>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if progress_label and progress_value is not none %}
+  <div
+    class="summary-progress"
+    style="--pct: {{ [0, [progress_value, 100]|min]|max }}%;"
+  >
+    <div class="summary-progress-label">
+      <span>{{ progress_label }}</span>
+      <span>{{ '%.1f'|format(progress_value) }}%</span>
+    </div>
+    <div class="summary-progress-track">
+      <div class="summary-progress-fill"></div>
+    </div>
+  </div>
+  {% endif %}
+</article>
+{% endmacro %}

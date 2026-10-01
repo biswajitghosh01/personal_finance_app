@@ -53,7 +53,7 @@ summary.values[code]['count'] + 1 }) %} {% endif %} {% endfor %}
             <th>Units</th>
             <th>Grant Value</th>
             <th>Current Value</th>
-            <th>P&L</th>
+            <th>P&amp;L</th>
             <th>Return</th>
             <th>Actions</th>
           </tr>
@@ -90,6 +90,10 @@ summary.values[code]['count'] + 1 }) %} {% endif %} {% endfor %}
                 >Edit</a
               >
             </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" class="empty-state">No ESOP records yet.</td>
           </tr>
           {% endfor %}
         </tbody>
