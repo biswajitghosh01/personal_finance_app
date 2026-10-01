@@ -1287,4 +1287,4 @@ def error_page(error): return render_template('error.html',code=getattr(error,'c
 
 if __name__=='__main__':
     init_db(); ensure_admin_schema(); print(f'Finance Vault: http://{BIND_HOST}:{BIND_PORT}'); print('Portal is now Live. Press Ctrl+C to stop the server.');
-    serve(app,host=BIND_HOST,port=BIND_PORT,threads=8,trusted_proxy='127.0.0.1',trusted_proxy_headers=['x-forwarded-for', 'x-forwarded-proto', 'x-forwarded-host'])
+    serve(app,host=BIND_HOST,port=BIND_PORT,threads=8,)
