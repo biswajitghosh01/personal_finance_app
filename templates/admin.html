@@ -1,14 +1,216 @@
-{% extends 'base.html' %}
-{% block title %}
-Administration{% endblock %}
-{% block page_heading %}
-Administration{% endblock %}
-{% block styles %}
-<link rel="stylesheet" href="{{ url_for('static',filename='admin.css') }}">
-{% endblock %}
-{% block content %}
+{% extends 'base.html' %} {% block title %}Administration{% endblock %} {% block
+page_heading %}Administration{% endblock %} {% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}" />
+{% endblock %} {% block content %}
 <section class="page-intro">
+  <div>
+    <span class="eyebrow">SYSTEM ADMINISTRATION</span>
+    <h1>User Management</h1>
+    <p>
+      Add users, reset passwords, remove accounts, and review application
+      health.
+    </p>
+  </div>
+  <a class="button" href="{{ url_for('admin.health') }}">Application Health</a>
+</section>
+
+<!-- Summary strip -->
+<section class="admin-summary">
+  <article class="panel admin-summary-card">
+    <span class="admin-summary-icon" aria-hidden="true">●</span>
     <div>
-        <span class="eyebrow">SYSTEM ADMINISTRATION</span>
-        <h1>User Management</h1>
-        <p>Add users, reset passwords, remove accounts, and review application health.</p></div><a class="button" href="{{ url_for('admin.health') }}">Application Health</a></section><section class="admin-layout"><article class="panel admin-form-panel"><h2>Add User</h2><form method="post" action="{{ url_for('admin.add_user') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Username<input name="username" maxlength="80" required></label><label>Role<select name="role"><option value="USER">User</option><option value="ADMIN">Administrator</option></select></label><label>Temporary Password<input type="password" name="password" minlength="14" required></label><label>Confirm Password<input type="password" name="confirm" minlength="14" required></label><button class="wide">Add User</button></form></article><article class="panel data-panel admin-users"><div class="panel-heading"><div><span class="eyebrow">ACCESS DIRECTORY</span><h2>Users</h2></div><span class="badge">{{ users|length }} accounts</span></div><div class="table-wrap"><table><thead><tr><th>User</th><th>Role</th><th>Status</th><th>Created</th><th>Password</th><th>Delete</th></tr></thead><tbody>{% for user in users %}<tr><td><strong>{{ user.username }}</strong></td><td><span class="badge">{{ user.role }}</span></td><td>{{ 'Active' if user.active else 'Inactive' }}</td><td>{{ user.created_at[:10] if user.created_at else 'N/A' }}</td><td><form class="inline-reset" method="post" action="{{ url_for('admin.edit_password',user_id=user.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="password" name="password" minlength="14" placeholder="New password" required><input type="password" name="confirm" minlength="14" placeholder="Confirm" required><button>Reset</button></form></td><td><form method="post" action="{{ url_for('admin.delete_user',user_id=user.id) }}" data-confirm="Delete user {{ user.username }}?"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="icon-button danger">Delete</button></form></td></tr>{% endfor %}</tbody></table></div></article></section>{% endblock %}{% block scripts %}<script src="{{ url_for('static',filename='admin.js') }}" defer></script>{% endblock %}
+      <small>Total users</small>
+      <strong>{{ users|length }}</strong>
+    </div>
+  </article>
+  <article class="panel admin-summary-card">
+    <span class="admin-summary-icon role-icon" aria-hidden="true">◆</span>
+    <div>
+      <small>Administrators</small>
+      <strong
+        >{{ users|selectattr('role', 'equalto', 'ADMIN')|list|length }}</strong
+      >
+    </div>
+  </article>
+  <article class="panel admin-summary-card">
+    <span class="admin-summary-icon active-icon" aria-hidden="true">✓</span>
+    <div>
+      <small>Active</small>
+      <strong>{{ users|selectattr('active')|list|length }}</strong>
+    </div>
+  </article>
+  <article class="panel admin-summary-card">
+    <span class="admin-summary-icon inactive-icon" aria-hidden="true">✕</span>
+    <div>
+      <small>Inactive</small>
+      <strong>{{ users|rejectattr('active')|list|length }}</strong>
+    </div>
+  </article>
+</section>
+
+<!-- Two-column workspace -->
+<section class="admin-workspace">
+  <!-- Left: Add user -->
+  <article class="panel admin-form-panel">
+    <div class="panel-heading">
+      <div>
+        <span class="eyebrow">NEW ACCOUNT</span>
+        <h2>Add User</h2>
+      </div>
+    </div>
+
+    <form
+      method="post"
+      action="{{ url_for('admin.add_user') }}"
+      class="admin-form"
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+      <label>
+        Username
+        <input name="username" maxlength="80" required autocomplete="off" />
+      </label>
+
+      <label>
+        Role
+        <select name="role">
+          <option value="USER">User</option>
+          <option value="ADMIN">Administrator</option>
+        </select>
+      </label>
+
+      <label>
+        Temporary Password
+        <input
+          type="password"
+          name="password"
+          minlength="14"
+          required
+          autocomplete="new-password"
+        />
+        <small class="field-hint"
+          >14+ characters with upper, lower, digit, and symbol.</small
+        >
+      </label>
+
+      <label>
+        Confirm Password
+        <input
+          type="password"
+          name="confirm"
+          minlength="14"
+          required
+          autocomplete="new-password"
+        />
+      </label>
+
+      <button class="wide">Create User</button>
+    </form>
+  </article>
+
+  <!-- Right: Users list -->
+  <article class="panel admin-users">
+    <div class="panel-heading admin-users-head">
+      <div>
+        <span class="eyebrow">ACCESS DIRECTORY</span>
+        <h2>Users</h2>
+      </div>
+      <span class="badge"
+        >{{ users|length }} {{ 'account' if users|length == 1 else 'accounts'
+        }}</span
+      >
+    </div>
+
+    {% if users %}
+    <ul class="admin-user-list">
+      {% for user in users %}
+      <li class="admin-user-row">
+        <div class="admin-user-identity">
+          <span class="admin-avatar" aria-hidden="true"
+            >{{ user.username[:1]|upper }}</span
+          >
+          <div>
+            <strong>{{ user.username }}</strong>
+            <small
+              >Created {{ user.created_at[:10] if user.created_at else 'N/A'
+              }}</small
+            >
+          </div>
+        </div>
+
+        <div class="admin-user-meta">
+          <span
+            class="pill role-pill {{ 'role-admin' if user.role == 'ADMIN' else 'role-user' }}"
+          >
+            {{ user.role|title }}
+          </span>
+          <span
+            class="pill status-pill {{ 'status-active' if user.active else 'status-inactive' }}"
+          >
+            <i aria-hidden="true"></i>
+            {{ 'Active' if user.active else 'Inactive' }}
+          </span>
+        </div>
+
+        <div class="admin-user-actions">
+          <details class="admin-reset">
+            <summary class="icon-button edit">Reset</summary>
+            <form
+              method="post"
+              action="{{ url_for('admin.edit_password', user_id=user.id) }}"
+              class="admin-reset-form"
+            >
+              <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+              />
+              <label>
+                New password
+                <input
+                  type="password"
+                  name="password"
+                  minlength="14"
+                  required
+                  autocomplete="new-password"
+                />
+              </label>
+              <label>
+                Confirm password
+                <input
+                  type="password"
+                  name="confirm"
+                  minlength="14"
+                  required
+                  autocomplete="new-password"
+                />
+              </label>
+              <div class="admin-reset-actions">
+                <button type="submit">Save</button>
+              </div>
+            </form>
+          </details>
+
+          <form
+            method="post"
+            action="{{ url_for('admin.delete_user', user_id=user.id) }}"
+            data-confirm="Delete user {{ user.username }}?"
+          >
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button class="icon-button danger" type="submit">Delete</button>
+          </form>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty-state">
+      <strong>No users yet</strong>
+      <p>Add the first user using the form.</p>
+    </div>
+    {% endif %}
+  </article>
+</section>
+{% endblock %} {% block scripts %}
+<script src="{{ url_for('static', filename='admin.js') }}" defer></script>
+{% endblock %}

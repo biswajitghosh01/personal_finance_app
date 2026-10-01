@@ -1,5 +1,40 @@
 # Secure Finance Vault
 
+## Quick Start
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+
+umask 077
+.venv/bin/python - <<'PY'
+from pathlib import Path
+from cryptography.fernet import Fernet
+import secrets
+Path('.env').write_text(
+    'SECRET_KEY=' + secrets.token_urlsafe(64) + '\n'
+    'DATA_KEY=' + Fernet.generate_key().decode() + '\n'
+    'DEFAULT_USER=admin\n'
+    'DEFAULT_PASSWORD=ChangeMe-5555!\n', encoding='utf-8')
+PY
+chmod 600 .env
+mkdir -p instance
+chmod 700 instance
+
+.venv/bin/python app.py
+```
+
+Then open `http://localhost:5555` and sign in with:
+
+```text
+Username: admin
+Password: ChangeMe-5555!
+```
+
+The first user is created automatically when the database is initialized from `DEFAULT_USER` and `DEFAULT_PASSWORD` in `.env`. The account is forced to change its password on first login.
+
 ## Start
 
 ```bash
@@ -104,6 +139,28 @@ All four settings are mandatory. A missing one aborts startup with `Missing requ
 - Variables already present in the process environment take precedence over the file.
 
 Choose a different `DEFAULT_PASSWORD` if you prefer. The account is created with a forced-rotation flag, and the application rejects reusing the default value when you set the real password.
+
+#### Create the first user
+
+The first user is created automatically when the database is initialized. You do not create it manually in the UI or a shell script.
+
+Before starting the app, define the default credentials in `.env`:
+
+```text
+DEFAULT_USER=admin
+DEFAULT_PASSWORD=ChangeMe-5555!
+```
+
+When the app boots with a fresh `instance/finance.db`, `init_db()` runs and executes:
+
+```python
+connection.execute(
+    'INSERT OR IGNORE INTO users(username,password_hash,must_change,created_at) VALUES(?,?,1,?)',
+    (os.environ['DEFAULT_USER'], password_hasher.hash(os.environ['DEFAULT_PASSWORD']), now())
+)
+```
+
+This inserts the user only if the username is not already present. The password is stored as an Argon2id hash, and the account is marked with `must_change=1`, so the first login requires changing the password. If you keep the default credentials, the app will reject reusing them once you set a new password.
 
 #### 3. `instance/` directory
 
