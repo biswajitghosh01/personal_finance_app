@@ -12,7 +12,7 @@
     />
     <link
       rel="stylesheet"
-      href="{{ url_for('static', filename='style.css', v=4) }}"
+      href="{{ url_for('static', filename='style.css', v=5) }}"
     />
     {% block styles %}{% endblock %}
   </head>
@@ -23,7 +23,10 @@
           <span class="brand-mark" aria-hidden="true"
             ><i></i><i></i><i></i
           ></span>
-          <span>FINANCE<br />DASHBOARD</span>
+          <span class="brand-copy">
+            <strong>Secure Finance</strong>
+            <small>PRIVATE WEALTH</small>
+          </span>
         </a>
 
         {% if session.uid %}
@@ -39,16 +42,18 @@
         </form>
 
         <nav class="side-nav" aria-label="Primary navigation">
-          <div class="nav-group" role="group" aria-label="Overview">
+          <section class="nav-group" aria-labelledby="nav-overview">
+            <h2 class="nav-group-title" id="nav-overview">Overview</h2>
             <a class="nav-link" href="{{ url_for('dashboard') }}"
               ><span aria-hidden="true">◷</span>Overview</a
             >
             <a class="nav-link" href="{{ url_for('bank_accounts') }}"
               ><span aria-hidden="true">▤</span>Accounts</a
             >
-          </div>
+          </section>
 
-          <div class="nav-group" role="group" aria-label="Investments">
+          <section class="nav-group" aria-labelledby="nav-investments">
+            <h2 class="nav-group-title" id="nav-investments">Investments</h2>
             <a class="nav-link" href="{{ url_for('fixed_deposits') }}"
               ><span aria-hidden="true">◆</span>Fixed Deposits</a
             >
@@ -76,36 +81,34 @@
               href="{{ url_for('section', category='OTHER') }}"
               ><span aria-hidden="true">◍</span>Other Assets</a
             >
-          </div>
+          </section>
 
-          <div class="nav-group" role="group" aria-label="Planning">
+          <section class="nav-group" aria-labelledby="nav-planning">
+            <h2 class="nav-group-title" id="nav-planning">Planning</h2>
             <a class="nav-link" href="{{ url_for('retirals') }}"
-              ><span aria-hidden="true">⇄</span>Retirement</a
+              ><span aria-hidden="true">⇄</span>Retirals</a
             >
             <a
               class="nav-link"
               href="{{ url_for('section', category='LIABILITY') }}"
               ><span aria-hidden="true">▼</span>Liabilities</a
             >
-          </div>
+          </section>
 
-          <div
-            class="nav-group"
-            role="group"
-            aria-label="Account and administration"
-          >
+          <section class="nav-group" aria-labelledby="nav-account">
+            <h2 class="nav-group-title" id="nav-account">Account</h2>
             <a class="nav-link" href="{{ url_for('admin.profile') }}"
               ><span aria-hidden="true">●</span>Profile</a
             >
             {% if is_admin %}
             <a class="nav-link" href="{{ url_for('admin.dashboard') }}"
-              ><span aria-hidden="true">⚙</span>Administration</a
+              ><span aria-hidden="true">⚙</span>Admin settings</a
             >
             <a class="nav-link" href="{{ url_for('admin.health') }}"
-              ><span aria-hidden="true">✚</span>Health</a
+              ><span aria-hidden="true">✚</span>System health</a
             >
             {% endif %}
-          </div>
+          </section>
         </nav>
         {% endif %}
       </aside>
