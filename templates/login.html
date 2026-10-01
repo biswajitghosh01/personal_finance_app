@@ -1,1 +1,35 @@
-{% extends 'base.html' %}{% block title %}Sign in | Finance Dashboard{% endblock %}{% block page_heading %}Secure Access{% endblock %}{% block content %}<section class="login-layout"><div class="login-copy"><span class="eyebrow">PRIVATE FINANCE</span><h1>Clarity across every account and investment.</h1><p>Track cash, deposits, equities, liabilities, and transactions in one secure local dashboard.</p><div class="login-bars"><i></i><i></i><i></i><i></i><i></i></div></div><section class="panel auth-panel"><div class="auth-icon">₹</div><h2>Welcome back</h2><p>Sign in to continue.</p><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label>Username<input name="username" maxlength="80" autocomplete="username" required autofocus></label><label>Password<input type="password" name="password" autocomplete="current-password" required></label><button class="wide">Sign In</button></form><small>First login: admin / ChangeMe-5555!</small></section></section>{% endblock %}
+{% extends 'base.html' %}{% block title %}Sign in | Finance Dashboard{% endblock
+%}{% block page_heading %}Secure Access{% endblock %}{% block content %}
+<section class="login-layout">
+  <div class="login-copy">
+    <span class="eyebrow">PRIVATE FINANCE</span>
+    <h1>Clarity across every account and investment.</h1>
+    <p>
+      Track cash, deposits, equities, liabilities, and transactions in one
+      secure local dashboard.
+    </p>
+    <div class="login-bars"><i></i><i></i><i></i><i></i><i></i></div>
+  </div>
+  <section class="panel auth-panel">
+    <div class="auth-icon">₹</div>
+    <h2>Welcome back</h2>
+    <p>Sign in to continue.</p>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" /><label
+        >Username<input
+          name="username"
+          maxlength="80"
+          autocomplete="username"
+          required
+          autofocus /></label
+      ><label
+        >Password<input
+          type="password"
+          name="password"
+          autocomplete="current-password"
+          required /></label
+      ><button class="wide">Sign In</button>
+    </form>
+  </section>
+</section>
+{% endblock %}
