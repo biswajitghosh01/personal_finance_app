@@ -1,0 +1,169 @@
+{% extends 'base.html' %}
+
+{% set is_edit = metal_id is defined and metal_id %}
+
+{% block title %}{{ 'Edit' if is_edit else 'Add' }} Metal Asset{% endblock %}
+{% block page_heading %}Metals{% endblock %}
+
+{% block content %}
+<section class="page-intro">
+    <div>
+        <span class="eyebrow">
+            {{ 'EDIT RECORD' if is_edit else 'NEW RECORD' }}
+        </span>
+
+        <h1>{{ 'Edit' if is_edit else 'Add' }} Metal Asset</h1>
+
+        <p>
+            Record the asset description, asset type, investment value, and current value.
+        </p>
+    </div>
+
+    <a class="button secondary" href="{{ url_for('metals') }}">
+        Cancel
+    </a>
+</section>
+
+<form method="post" class="panel form-grid">
+    <input
+        type="hidden"
+        name="csrf_token"
+        value="{{ csrf_token() }}"
+    >
+
+    <label>
+        Asset Description
+        <input
+            name="mint_brand"
+            maxlength="120"
+            value="{{ metal['mint_brand']|default('', true) }}"
+            placeholder="Gold coin, silver bar, Gold ETF, etc."
+            required
+        >
+    </label>
+
+    <label>
+        Asset Type
+        <select name="metal_type" required>
+            {% for item in metal_types %}
+                <option
+                    value="{{ item }}"
+                    {% if metal['metal_type']|default('', true) == item %}selected{% endif %}
+                >
+                    {{ item }}
+                </option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <label>
+        Investment Value
+        <input
+            type="number"
+            name="investment_amount"
+            step="0.01"
+            min="0.01"
+            value="{{ metal['investment_amount']|default('', true) }}"
+            required
+        >
+    </label>
+
+    <label>
+        Current Value
+        <input
+            type="number"
+            name="current_value"
+            step="0.01"
+            min="0"
+            value="{{ metal['current_value']|default('0', true) }}"
+            required
+        >
+    </label>
+
+    <label>
+        Currency
+        <select name="currency" required>
+            {% for item in currencies %}
+                <option
+                    value="{{ item }}"
+                    {% if metal['currency']|default('INR', true) == item %}selected{% endif %}
+                >
+                    {{ currency_symbol(item) }} {{ item }}
+                </option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <details class="full">
+        <summary>Additional metal details</summary>
+
+        <div class="form-grid nested-form-grid">
+            <label>
+                Form / Product
+                <select name="product_form" required>
+                    {% for item in product_forms %}
+                        <option
+                            value="{{ item }}"
+                            {% if metal['product_form']|default('Other', true) == item %}selected{% endif %}
+                        >
+                            {{ item }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label>
+                Weight
+                <input
+                    type="number"
+                    name="weight"
+                    step="any"
+                    min="0.000001"
+                    value="{{ metal['weight']|default('1', true) }}"
+                    required
+                >
+            </label>
+
+            <label>
+                Weight Unit
+                <select name="weight_unit" required>
+                    <option
+                        value="GRAM"
+                        {% if metal['weight_unit']|default('GRAM', true) == 'GRAM' %}selected{% endif %}
+                    >
+                        Grams
+                    </option>
+
+                    <option
+                        value="TROY_OUNCE"
+                        {% if metal['weight_unit']|default('', true) == 'TROY_OUNCE' %}selected{% endif %}
+                    >
+                        Troy Ounces
+                    </option>
+                </select>
+            </label>
+
+            <label>
+                Purity / Fineness
+                <input
+                    name="purity"
+                    maxlength="30"
+                    value="{{ metal['purity']|default('N/A', true) }}"
+                    placeholder=".999, .9167, 22k, or N/A"
+                    required
+                >
+            </label>
+        </div>
+    </details>
+
+    <div class="full form-actions">
+        <a class="button secondary" href="{{ url_for('metals') }}">
+            Cancel
+        </a>
+
+        <button type="submit">
+            {{ 'Update' if is_edit else 'Save' }} Metal Asset
+        </button>
+    </div>
+</form>
+{% endblock %}

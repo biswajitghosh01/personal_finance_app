@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}Overview | Finance Dashboard{% endblock %}
+{% block page_heading %}Overview{% endblock %}
+{% block content %}
+<section class="page-intro dashboard-intro">
+  <div>
+    <span class="eyebrow">PORTFOLIO OVERVIEW</span>
+    <h1>Net worth dashboard</h1>
+    <p>Assets, liabilities, allocation, and retirement holdings based on your saved records.</p>
+  </div>
+</section>
+
+<section class="kpi-grid dashboard-kpis">
+  {% for currency,value in net.items() %}
+  <article class="panel kpi-card accent-cyan">
+    <div class="kpi-label">Net Worth · {{ currency }}</div>
+    <strong>{{ currency_symbol(currency) }} {{ '{:,.2f}'.format(value) }}</strong>
+    <small>Assets {{ currency_symbol(currency) }} {{ '{:,.2f}'.format(assets.get(currency,0)) }} · Liabilities {{ currency_symbol(currency) }} {{ '{:,.2f}'.format(liabilities.get(currency,0)) }}</small>
+  </article>
+  {% else %}
+  <article class="panel kpi-card accent-cyan"><div class="kpi-label">Net Worth</div><strong>0.00</strong><small>Add financial records to populate the dashboard.</small></article>
+  {% endfor %}
+  <article class="panel kpi-card accent-green"><div class="kpi-label">Asset Classes</div><strong>{{ allocation_chart.labels|length }}</strong><small>Categories with current value</small></article>
+  <article class="panel kpi-card accent-pink"><div class="kpi-label">Active Liabilities</div><strong>{{ liability_chart.labels|length }}</strong><small>Outstanding liability categories</small></article>
+</section>
+
+<section class="dashboard-grid dashboard-primary-grid">
+  <article class="panel chart-panel chart-primary">
+    <div class="panel-heading">
+      <div><span class="eyebrow">PORTFOLIO MIX</span><h2>Asset Allocation</h2></div>
+      <span class="chart-context">Current value by asset class</span>
+    </div>
+    <div class="chart-canvas-wrap chart-primary-canvas"><canvas id="allocation-chart" aria-label="Asset allocation chart"></canvas></div>
+  </article>
+
+  <article class="panel chart-panel chart-primary">
+    <div class="panel-heading">
+      <div><span class="eyebrow">BALANCE SHEET</span><h2>Assets vs Liabilities</h2></div>
+      <span class="chart-context">Exposure by currency</span>
+    </div>
+    <div class="chart-canvas-wrap chart-primary-canvas"><canvas id="balance-chart" aria-label="Assets versus liabilities chart"></canvas></div>
+  </article>
+</section>
+
+<section class="dashboard-grid dashboard-secondary-grid">
+  
+  <article class="panel chart-panel">
+    <div class="panel-heading">
+      <div><span class="eyebrow">DEBT MIX</span>
+        <h2>Liability Breakdown</h2></div></div><div class="chart-canvas-wrap"><canvas id="liability-chart" aria-label="Liability breakdown chart"></canvas></div></article>
+  <article class="panel chart-panel"><div class="panel-heading"><div><span class="eyebrow">METALS</span><h2>Metal Portfolio</h2></div></div><div class="chart-canvas-wrap"><canvas id="metals-chart" aria-label="Metal portfolio chart"></canvas></div></article>
+</section>
+
+<section class="panel portfolio-panel">
+  <div class="panel-heading"><div><span class="eyebrow">QUICK ACCESS</span><h2>Portfolio Sections</h2></div></div>
+  <div class="section-grid">{% for item in section_links %}<a class="section-tile" href="{{ item.url }}"><span class="tile-icon">{{ item.label[:1] }}</span><span><b>{{ item.label }}</b><small>View records and values</small></span><em>›</em></a>{% endfor %}</div>
+</section>
+
+<script id="dashboard-chart-data" type="application/json">{{ chart_data|tojson }}</script>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static',filename='charts.js') }}" defer></script>{% endblock %}

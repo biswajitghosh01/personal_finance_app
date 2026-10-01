@@ -1,0 +1,11 @@
+instance/finance.db
+instance/finance.db-wal
+instance/finance.db-shm
+instance/finance(1).db-wal
+instance/finance(2).db-shm
+instance/finance(2).db-wal
+instance/finance(1).db-shm
+instance/finance(3).db-wal
+.env
+__pycache__/admin_routes.cpython-314.pyc
+instance/finance(3).db-shm

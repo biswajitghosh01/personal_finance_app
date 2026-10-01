@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block title %}My Profile | Finance Dashboard{% endblock %}
+{% block page_heading %}My Profile{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='profile.css') }}">{% endblock %}
+
+{% block content %}
+<section class="profile-hero panel">
+  <div class="profile-identity">
+    <div class="profile-avatar" aria-hidden="true">{{ user.username[:1]|upper }}</div>
+    <div>
+      <span class="eyebrow">USER ACCOUNT</span>
+      <h1>{{ user.username }}</h1>
+      <div class="profile-badges">
+        <span class="profile-badge role-badge">{{ user.role|title }}</span>
+        <span class="profile-badge {{ 'status-active' if user.active else 'status-inactive' }}">
+          <i aria-hidden="true"></i>{{ 'Active' if user.active else 'Inactive' }}
+        </span>
+      </div>
+    </div>
+  </div>
+  <div class="profile-actions">
+    <a class="button" href="{{ url_for('change_password') }}">Change Password</a>
+    {% if is_admin %}<a class="button secondary" href="{{ url_for('admin.dashboard') }}">Administration</a>{% endif %}
+  </div>
+</section>
+
+<section class="profile-grid">
+  <article class="panel profile-card">
+    <div class="profile-icon" aria-hidden="true">●</div>
+    <div><span>Username</span><strong>{{ user.username }}</strong><small>Your Finance Dashboard sign-in name</small></div>
+  </article>
+
+  <article class="panel profile-card">
+    <div class="profile-icon role-icon" aria-hidden="true">◆</div>
+    <div><span>Access Role</span><strong>{{ user.role|title }}</strong><small>{{ 'Full administration access' if user.role == 'ADMIN' else 'Standard portfolio access' }}</small></div>
+  </article>
+
+  <article class="panel profile-card">
+    <div class="profile-icon {{ 'active-icon' if user.active else 'inactive-icon' }}" aria-hidden="true">✓</div>
+    <div><span>Account Status</span><strong>{{ 'Active' if user.active else 'Inactive' }}</strong><small>{{ 'Account access is enabled' if user.active else 'Account access is disabled' }}</small></div>
+  </article>
+
+  <article class="panel profile-card">
+    <div class="profile-icon date-icon" aria-hidden="true">◷</div>
+    <div><span>Account Created</span><strong>{{ user.created_at[:10] if user.created_at else 'Not available' }}</strong><small>Profile creation date</small></div>
+  </article>
+
+  <article class="panel profile-card profile-card-wide">
+    <div class="profile-icon login-icon" aria-hidden="true">↪</div>
+    <div><span>Last Successful Login</span><strong>{{ user.last_login[:19]|replace('T',' ') if user.last_login else 'Not recorded' }}</strong><small>The most recent successful sign-in stored by the application</small></div>
+  </article>
+</section>
+
+<section class="panel profile-security">
+  <div>
+    <span class="eyebrow">ACCOUNT SECURITY</span>
+    <h2>Password and access</h2>
+    <p>Use a strong, unique password for this local finance application.</p>
+  </div>
+  <a class="button" href="{{ url_for('change_password') }}">Update Password</a>
+</section>
+{% endblock %}

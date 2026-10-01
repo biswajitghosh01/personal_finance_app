@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}Add asset{% endblock %}
+{% block page_heading %}Add Asset{% endblock %}
+{% block content %}
+{% set form_title='Add asset' %}
+{% set form_description='Use the dedicated pages for Bank Accounts, Fixed Deposits, Stocks, ESOPs, Mutual Funds, Metals, and Liabilities.' %}
+{% set cancel_url=url_for('dashboard') %}
+{% include '_form_header.html' %}
+<form method="post" class="panel form-grid">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>Section<select name="category" id="category">{% for code,label in categories.items() %}<option value="{{ code }}" {% if current==code %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <label>Currency<select name="currency">{% for currency in currencies %}<option value="{{ currency }}" {% if currency=='INR' %}selected{% endif %}>{{ currency_symbol(currency) }} {{ currency }}</option>{% endfor %}</select></label>
+  <label>Name<input name="name" maxlength="120" required></label>
+  <label>Institution / Provider<input name="institution" maxlength="120"></label>
+  <label>Market / Country<input name="country" maxlength="60"></label>
+  <label>Account / Folio Reference<input name="account_ref" maxlength="80" autocomplete="off"></label>
+  <label>Quantity / Units<input type="number" name="quantity" min="0" step="any" value="0"></label>
+  <label>Current Unit Price<input type="number" name="current_price" min="0" step="any" value="0"></label>
+  <label>Principal / Balance<input type="number" name="principal" min="0" step="any" value="0"></label>
+  <label>Rate of Interest %<input type="number" name="interest_rate" min="0" step="any" value="0"></label>
+  <label>Start / Grant Date<input type="date" name="start_date"></label>
+  <label>Maturity / Vesting Date<input type="date" name="maturity_date"></label>
+  <label class="full">Notes<textarea name="notes" maxlength="1000"></textarea></label>
+  <div class="full form-actions"><button type="submit">Save asset</button></div>
+</form>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static',filename='form.js') }}" defer></script>{% endblock %}

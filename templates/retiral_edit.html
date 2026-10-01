@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% set is_edit = retiral_id is defined and retiral_id %}
+{% block title %}{{ 'Edit' if is_edit else 'Add' }} Retiral Fund{% endblock %}
+{% block page_heading %}Retirals{% endblock %}
+{% block content %}
+<section class="page-intro"><div><span class="eyebrow">{{ 'EDIT RECORD' if is_edit else 'NEW RECORD' }}</span><h1>{{ 'Edit' if is_edit else 'Add' }} Retiral Fund</h1></div><a class="button secondary" href="{{ url_for('retirals') }}">Cancel</a></section>
+<form method="post" class="panel form-grid" id="retiral-form">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<label>Type of Retiral Fund<select name="fund_type" required>{% for item in fund_types %}<option value="{{ item }}" {% if retiral['fund_type']|default('',true)==item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
+<label>Currency<select name="currency" required>{% for item in currencies %}<option value="{{ item }}" {% if retiral['currency']|default('INR',true)==item %}selected{% endif %}>{{ currency_symbol(item) }} {{ item }}</option>{% endfor %}</select></label>
+<label>Amount Invested<input type="number" step="0.01" min="0" name="amount_invested" id="amount_invested" value="{{ retiral['amount_invested']|default('0',true) }}" required></label>
+<label>Current Value<input type="number" step="0.01" min="0" name="current_value" id="current_value" value="{{ retiral['current_value']|default('0',true) }}" required></label>
+<label>Unrealised P&amp;L<input class="calculated" id="retiral_profit_loss" value="0.00" readonly></label>
+<label>Unrealised Return<input class="calculated" id="retiral_return" value="0.00%" readonly></label>
+<label class="full">Notes<textarea name="notes" maxlength="1000">{{ retiral['notes']|default('',true) }}</textarea></label>
+<div class="full form-actions"><a class="button secondary" href="{{ url_for('retirals') }}">Cancel</a><button type="submit">{{ 'Update' if is_edit else 'Save' }} Retiral Fund</button></div>
+</form>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='retirals.js') }}" defer></script>{% endblock %}

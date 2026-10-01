@@ -1,0 +1,195 @@
+{% extends 'base.html' %}
+
+{% block title %}Metals{% endblock %}
+{% block page_heading %}Metals{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='record_actions.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='metals.css') }}">
+{% endblock %}
+
+{% block content %}
+{% set summary = namespace(values={}, count=0) %}
+
+{% for row in rows %}
+    {% set code = row['currency'] %}
+    {% set invested = row['investment_amount']|float %}
+    {% set current = row['current_value']|float %}
+
+    {% if code not in summary.values %}
+        {% set _ = summary.values.update({
+            code: {
+                'invested': invested,
+                'current': current,
+                'count': 1
+            }
+        }) %}
+    {% else %}
+        {% set _ = summary.values[code].update({
+            'invested': summary.values[code]['invested'] + invested,
+            'current': summary.values[code]['current'] + current,
+            'count': summary.values[code]['count'] + 1
+        }) %}
+    {% endif %}
+
+    {% set summary.count = summary.count + 1 %}
+{% endfor %}
+
+<div class="metals-page">
+    <section class="page-intro metals-intro">
+        <div>
+            <span class="eyebrow">METAL INVESTMENTS</span>
+            <h1>Metals</h1>
+            <p>Track each metal asset's invested value, current value, and unrealised performance.</p>
+        </div>
+
+        <a class="button" href="{{ url_for('metal_new') }}">
+            + Add Metal Asset
+        </a>
+    </section>
+
+    {% if summary.values %}
+    <section class="metal-summary-grid" aria-label="Metal portfolio summary">
+        {% for code, total in summary.values.items() %}
+            {% set profit_loss = total['current'] - total['invested'] %}
+            {% set return_percentage = (profit_loss / total['invested'] * 100) if total['invested'] else 0 %}
+
+            <article class="panel metal-summary-card">
+                <div class="metal-summary-head">
+                    <div>
+                        <span class="kpi-label">Metal portfolio value</span>
+                        <strong class="metal-summary-total">
+                            {{ currency_symbol(code) }} {{ '{:,.2f}'.format(total['current']) }}
+                        </strong>
+                    </div>
+
+                    <span class="metal-currency-pill">{{ code }}</span>
+                </div>
+
+                <div class="metal-summary-metrics">
+                    <div>
+                        <small>Amount invested</small>
+                        <strong>{{ currency_symbol(code) }} {{ '{:,.2f}'.format(total['invested']) }}</strong>
+                    </div>
+
+                    <div>
+                        <small>Unrealised P&amp;L</small>
+                        <strong class="{{ 'positive' if profit_loss >= 0 else 'negative' }}">
+                            {{ currency_symbol(code) }} {{ '{:,.2f}'.format(profit_loss) }}
+                        </strong>
+                    </div>
+
+                    <div>
+                        <small>Portfolio return</small>
+                        <strong class="{{ 'positive' if profit_loss >= 0 else 'negative' }}">
+                            {{ '%.2f'|format(return_percentage) }}%
+                        </strong>
+                    </div>
+
+                    <div>
+                        <small>Holdings</small>
+                        <strong>{{ total['count'] }}</strong>
+                    </div>
+                </div>
+            </article>
+        {% endfor %}
+    </section>
+    {% else %}
+    <section class="panel metal-empty-summary">
+        <strong>No metal holdings yet</strong>
+        <p>Add a metal asset to begin tracking portfolio value and performance.</p>
+    </section>
+    {% endif %}
+
+    <section class="panel data-panel metals-data-panel">
+        <div class="metals-panel-head">
+            <div>
+                <span class="eyebrow">HOLDINGS REGISTER</span>
+                <h2>Metal assets</h2>
+            </div>
+
+            <span class="metal-record-count">
+                {{ summary.count }} {{ 'record' if summary.count == 1 else 'records' }}
+            </span>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Asset Description</th>
+                        <th>Asset Type</th>
+                        <th>Investment Value</th>
+                        <th>Current Value</th>
+                        <th>Unrealised P&amp;L</th>
+                        <th>Return</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for row in rows %}
+                        {% set investment_value = row['investment_amount']|float %}
+                        {% set current_value = row['current_value']|float %}
+                        {% set profit_loss = current_value - investment_value %}
+                        {% set return_percentage = (profit_loss / investment_value * 100) if investment_value else 0 %}
+
+                        <tr>
+                            <td>#{{ row['display_id'] }}</td>
+
+                            <td>
+                                <a class="record-link" href="{{ url_for('metal_edit', metal_id=row['id']) }}">
+                                    <strong>{{ row['mint_brand'] }}</strong>
+                                </a>
+                            </td>
+
+                            <td>
+                                <span class="badge">{{ row['metal_type'] }}</span>
+                            </td>
+
+                            <td class="money">
+                                {{ currency_symbol(row['currency']) }}
+                                {{ '{:,.2f}'.format(investment_value) }}
+                            </td>
+
+                            <td class="money">
+                                {{ currency_symbol(row['currency']) }}
+                                {{ '{:,.2f}'.format(current_value) }}
+                            </td>
+
+                            <td class="{{ 'positive' if profit_loss >= 0 else 'negative' }}">
+                                {{ currency_symbol(row['currency']) }}
+                                {{ '{:,.2f}'.format(profit_loss) }}
+                            </td>
+
+                            <td class="{{ 'positive' if profit_loss >= 0 else 'negative' }}">
+                                {{ '%.2f'|format(return_percentage) }}%
+                            </td>
+
+                            <td class="action-buttons">
+                                <a class="icon-button edit" href="{{ url_for('metal_edit', metal_id=row['id']) }}">
+                                    Edit
+                                </a>
+
+                                <form class="metal-delete-form" method="post" action="{{ url_for('metal_delete', metal_id=row['id']) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="icon-button danger" type="submit">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="8" class="empty-state">No metal assets recorded.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='metals.js') }}" defer></script>
+{% endblock %}

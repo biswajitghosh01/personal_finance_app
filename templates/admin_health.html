@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block title %}Application Health{% endblock %}
+{% block page_heading %}Application Health{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='admin.css') }}">{% endblock %}
+{% block content %}
+<section class="page-intro">
+  <div>
+    <span class="eyebrow">SYSTEM STATUS</span>
+    <h1>Application Health</h1>
+    <p>Runtime, database, storage, data-table, and activity-log checks.</p>
+  </div>
+  <a class="button secondary" href="{{ url_for('admin.dashboard') }}">Back to Administration</a>
+</section>
+<section class="admin-metrics health-metrics">
+  <article class="panel admin-card"><span>Database</span>
+    <strong class="{{ 'healthy' if health.database_status=='Healthy' else 'unhealthy' }}">{{ health.database_status }}</strong>
+    <small>Integrity: {{ health.integrity }}</small>
+  </article>
+  <article class="panel admin-card"><span>Encryption</span>
+    <strong>{{ health.encryption_status }}</strong>
+    <small>Account references at rest</small>
+  </article>
+  <article class="panel admin-card"><span>Session Timeout</span>
+    <strong>{{ health.session_timeout_minutes }} min</strong>
+    <small>Configured inactivity period</small>
+  </article>
+  <article class="panel admin-card"><span>Database Size</span>
+    <strong>{{ '%.2f'|format(health.database_size / 1048576) }} MB</strong>
+    <small class="health-path" title="{{ health.database_path }}">{{ health.database_path }}</small>
+  </article>
+  <article class="panel admin-card"><span>Free Disk</span>
+    <strong>{{ '%.2f'|format(health.free_disk / 1073741824) }} GB</strong>
+    <small>Storage available</small>
+  </article>
+  <article class="panel admin-card"><span>Runtime</span>
+    <strong>Python {{ health.python_version }}</strong>
+    <small>SQLite {{ health.sqlite_version }}</small>
+  </article>
+</section>
+<section class="panel data-panel section-gap">
+  <div class="panel-heading health-panel-heading">
+    <div>
+      <span class="eyebrow">DATABASE TABLES</span>
+      <h2>Record Counts</h2>
+    </div>
+  </div>
+  <div class="table-wrap"><table><thead><tr><th>Table</th><th>Rows</th><th>Status</th></tr></thead><tbody>{% for table,count in health.counts.items() %}<tr><td>{{ table }}</td><td>{{ count if count is not none else 'N/A' }}</td><td><span class="badge">{{ 'Available' if count is not none else 'Missing' }}</span></td></tr>{% endfor %}</tbody></table></div></section>
+<section class="panel log-panel section-gap"><div class="panel-heading health-panel-heading"><div><span class="eyebrow">AUDIT LOG</span><h2>Recent Application Activity</h2></div><span class="badge">Latest {{ audit_logs|length }}</span></div><div class="table-wrap log-table-wrap"><table class="log-table"><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Entity</th><th>Remote Address</th></tr></thead><tbody>{% for log in audit_logs %}<tr><td>{{ log.event_time }}</td><td>{{ log.username }}</td><td><code>{{ log.action }}</code></td><td>{{ log.entity_id if log.entity_id is not none else 'N/A' }}</td><td>{{ log.remote_addr }}</td></tr>{% else %}<tr><td colspan="5" class="empty-state">No audit events are available.</td></tr>{% endfor %}</tbody></table></div></section>
+<section class="panel log-panel section-gap"><div class="panel-heading health-panel-heading"><div><span class="eyebrow">SERVER LOG</span><h2>Recent File Log</h2><small class="health-path">{{ health.log_path }}</small></div><span class="badge">Latest {{ file_logs|length }}</span></div><div class="log-viewer" role="log" aria-label="Recent server log entries">{% for line in file_logs %}<div class="log-line">{{ line.rstrip() }}</div>{% else %}<div class="empty-state">No finance.log file is available. Audit activity remains available above.</div>{% endfor %}</div></section>
+{% endblock %}
