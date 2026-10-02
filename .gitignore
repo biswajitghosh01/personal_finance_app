@@ -16,3 +16,6 @@ __pycache__/
 instance/
 __pycache__/admin_routes.cpython-314.pyc
 instance/finance(3).db-shm
+terraform/terraform.tfvars
+terraform/finance_app_pub.pem
+terraform/finance_app
