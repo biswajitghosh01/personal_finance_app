@@ -9,12 +9,13 @@ block title %}Stocks{% endblock %} {% block page_heading %}Stocks{% endblock %}
   rel="stylesheet"
   href="{{ url_for('static', filename='portfolio_summary.css') }}"
 />
-{% endblock %} {% block content %} {% set summary = namespace(values={}) %} {%
-for row in rows %} {% set code = row.currency %} {% set invested =
-row.total_cost_price|float %} {% set current = row.current_holding_value|float
-%} {% if code not in summary.values %} {% set _ = summary.values.update({code:
-{'invested': invested, 'current': current, 'count': 1}}) %} {% else %} {% set _
-= summary.values[code].update({ 'invested': summary.values[code]['invested'] +
+{% endblock %} {% block content %} {# Aggregate per-currency totals for the
+summary cards #} {% set summary = namespace(values={}) %} {% for row in rows %}
+{% set code = row.currency %} {% set invested = row.total_cost_price|float %} {%
+set current = row.current_holding_value|float %} {% if code not in
+summary.values %} {% set _ = summary.values.update({ code: {'invested':
+invested, 'current': current, 'count': 1} }) %} {% else %} {% set _ =
+summary.values[code].update({ 'invested': summary.values[code]['invested'] +
 invested, 'current': summary.values[code]['current'] + current, 'count':
 summary.values[code]['count'] + 1 }) %} {% endif %} {% endfor %}
 
@@ -23,7 +24,10 @@ summary.values[code]['count'] + 1 }) %} {% endif %} {% endfor %}
     <div>
       <span class="eyebrow">CONSOLIDATED HOLDINGS</span>
       <h1>Stocks</h1>
-      <p>Consolidated positions and transaction lots.</p>
+      <p>
+        Consolidated positions grouped by stock, with editable transaction lots
+        below.
+      </p>
     </div>
     <a class="button" href="{{ url_for('stock_new') }}">+ New Record</a>
   </section>
@@ -34,35 +38,54 @@ summary.values[code]['count'] + 1 }) %} {% endif %} {% endfor %}
     total['current'] - total['invested'] %} {% set pct = (pnl /
     total['invested'] * 100) if total['invested'] else 0 %} {{ summary_card(
     label='Stock portfolio value', currency=code, current=total['current'],
-    invested=total['invested'], pnl=pnl, pct=pct, count=total['count'] ) }} {%
-    endfor %}
+    invested=total['invested'], pnl=pnl, pct=pct, count=total['count'],
+    accent='cyan' ) }} {% endfor %}
   </section>
   {% else %}
   <section class="summary-empty">
     <strong>No stock holdings yet</strong>
     <p>Add a stock lot to begin tracking performance.</p>
   </section>
-  {% endif %}
-
+  {% endif %} {# ---------------- Consolidated holdings ---------------- #}
   <section class="panel data-panel">
+    <div class="panel-heading lots-panel-heading">
+      <div>
+        <span class="eyebrow">CONSOLIDATED</span>
+        <h2>Holdings</h2>
+      </div>
+      <span class="badge"
+        >{{ rows|length }} {{ 'position' if rows|length == 1 else 'positions'
+        }}</span
+      >
+    </div>
     <div class="table-wrap">
-      <table>
+      <table class="stk-table">
+        <colgroup>
+          <col class="col-name" />
+          <col class="col-market" />
+          <col class="col-lots" />
+          <col class="col-money" />
+          <col class="col-money" />
+          <col class="col-money" />
+          <col class="col-pct" />
+          <col class="col-actions" />
+        </colgroup>
         <thead>
           <tr>
-            <th>Stock</th>
-            <th>Market</th>
-            <th>Lots</th>
-            <th>Cost</th>
-            <th>Current</th>
-            <th>P&L</th>
-            <th>Return</th>
-            <th>Actions</th>
+            <th class="stk-name">Stock</th>
+            <th class="stk-market">Market</th>
+            <th class="stk-lots">Lots</th>
+            <th class="stk-money">Cost</th>
+            <th class="stk-money">Current</th>
+            <th class="stk-money">P&amp;L</th>
+            <th class="stk-pct">Return</th>
+            <th class="stk-actions">Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for row in rows %}
           <tr>
-            <td>
+            <td class="stk-name">
               <a
                 class="record-link"
                 href="{{ url_for('stock_edit', stock_id=row.first_id) }}"
@@ -70,27 +93,163 @@ summary.values[code]['count'] + 1 }) %} {% endif %} {% endfor %}
                 <strong>{{ row.stock_name }}</strong>
               </a>
             </td>
-            <td>{{ row.market }}</td>
-            <td>{{ row.lot_count }}</td>
-            <td class="money">
+            <td class="stk-market">{{ row.market }}</td>
+            <td class="stk-lots">
+              <a class="record-link lots-link" href="#lot-{{ row.first_id }}"
+                >{{ row.lot_count }}</a
+              >
+            </td>
+            <td class="stk-money money">
               {{ currency_symbol(row.currency) }} {{
               '{:,.2f}'.format(row.total_cost_price|float) }}
             </td>
-            <td class="money">
+            <td class="stk-money money">
               {{ currency_symbol(row.currency) }} {{
               '{:,.2f}'.format(row.current_holding_value|float) }}
             </td>
-            <td class="money">
+            <td
+              class="stk-money money {{ 'positive' if row.profit_loss|float >= 0 else 'negative' }}"
+            >
               {{ currency_symbol(row.currency) }} {{
               '{:,.2f}'.format(row.profit_loss|float) }}
             </td>
-            <td>{{ '%.2f'|format(row.return_percentage|float) }}%</td>
-            <td class="action-buttons">
+            <td
+              class="stk-pct {{ 'positive' if row.profit_loss|float >= 0 else 'negative' }}"
+            >
+              {{ '%.2f'|format(row.return_percentage|float) }}%
+            </td>
+            <td class="stk-actions">
               <a
                 class="icon-button edit"
                 href="{{ url_for('stock_edit', stock_id=row.first_id) }}"
                 >Edit</a
               >
+              <form
+                method="post"
+                action="{{ url_for('stock_delete', stock_id=row.first_id) }}"
+                class="stk-actions-form"
+                data-confirm="Delete all {{ row.lot_count }} {{ 'lot' if row.lot_count == 1 else 'lots' }} of {{ row.stock_name }}?"
+              >
+                <input
+                  type="hidden"
+                  name="csrf_token"
+                  value="{{ csrf_token() }}"
+                />
+                <button class="icon-button danger" type="submit">
+                  Delete All
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="8" class="empty-state">No stock holdings yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {# ---------------- Individual transaction lots ---------------- #} {% if lots
+  %}
+  <section class="panel data-panel section-gap">
+    <div class="panel-heading lots-panel-heading">
+      <div>
+        <span class="eyebrow">TRANSACTION LOTS</span>
+        <h2>Individual purchases and sales</h2>
+      </div>
+      <span class="badge"
+        >{{ lots|length }} {{ 'lot' if lots|length == 1 else 'lots' }}</span
+      >
+    </div>
+    <div class="table-wrap">
+      <table class="lots-table">
+        <colgroup>
+          <col class="col-lot-id" />
+          <col class="col-name" />
+          <col class="col-market" />
+          <col class="col-date" />
+          <col class="col-num" />
+          <col class="col-money" />
+          <col class="col-money" />
+          <col class="col-money" />
+          <col class="col-money" />
+          <col class="col-sale" />
+          <col class="col-actions" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="lot-id">#</th>
+            <th class="lot-name">Stock</th>
+            <th class="lot-market">Market</th>
+            <th class="lot-date">Buy Date</th>
+            <th class="lot-num">Units</th>
+            <th class="lot-money">Buy Price</th>
+            <th class="lot-money">Current Price</th>
+            <th class="lot-money">Cost</th>
+            <th class="lot-money">Current Value</th>
+            <th class="lot-sale">Sale</th>
+            <th class="lot-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for lot in lots %} {% set units = lot.number_of_shares|float %} {%
+          set buy_price = lot.buy_price|float %} {% set current_price =
+          lot.current_price|float %} {% set fees = (lot.gst|float) +
+          (lot.brokerage|float) + (lot.stt|float) + (lot.exchange_fees|float) %}
+          {% set cost = (units * buy_price) + fees %} {% set sale_units =
+          lot.sale_units|float %} {% set remaining = [units - sale_units, 0]|max
+          %} {% set current_value = remaining * current_price %}
+          <tr id="lot-{{ lot.id }}">
+            <td class="lot-id">{{ loop.index }}</td>
+            <td class="lot-name"><strong>{{ lot.stock_name }}</strong></td>
+            <td class="lot-market">{{ lot.market }}</td>
+            <td class="lot-date">{{ lot.buy_transaction_date }}</td>
+            <td class="lot-num">{{ '%.6g'|format(units) }}</td>
+            <td class="lot-money money">
+              {{ currency_symbol(lot.currency) }} {{ '{:,.2f}'.format(buy_price)
+              }}
+            </td>
+            <td class="lot-money money">
+              {{ currency_symbol(lot.currency) }} {{
+              '{:,.2f}'.format(current_price) }}
+            </td>
+            <td class="lot-money money">
+              {{ currency_symbol(lot.currency) }} {{ '{:,.2f}'.format(cost) }}
+            </td>
+            <td class="lot-money money">
+              {{ currency_symbol(lot.currency) }} {{
+              '{:,.2f}'.format(current_value) }}
+            </td>
+            <td class="lot-sale">
+              {% if sale_units > 0 %} {{ '%.6g'|format(sale_units) }} @ {{
+              currency_symbol(lot.currency) }} {{
+              '{:,.2f}'.format(lot.sell_price|float) }} {% if lot.sale_date
+              %}<small class="muted">on {{ lot.sale_date }}</small>{% endif %}
+              {% else %}
+              <span class="muted">—</span>
+              {% endif %}
+            </td>
+            <td class="lot-actions">
+              <a
+                class="icon-button edit"
+                href="{{ url_for('stock_edit', stock_id=lot.id) }}"
+                >Edit</a
+              >
+              <form
+                method="post"
+                action="{{ url_for('stock_delete_lot', stock_id=lot.id) }}"
+                class="stk-actions-form"
+                data-confirm="Delete this lot of {{ lot.stock_name }}?"
+              >
+                <input
+                  type="hidden"
+                  name="csrf_token"
+                  value="{{ csrf_token() }}"
+                />
+                <button class="icon-button danger" type="submit">Delete</button>
+              </form>
             </td>
           </tr>
           {% endfor %}
@@ -98,5 +257,14 @@ summary.values[code]['count'] + 1 }) %} {% endif %} {% endfor %}
       </table>
     </div>
   </section>
+  {% endif %}
 </div>
+{% endblock %} {% block scripts %}
+<script>
+  document.querySelectorAll("form[data-confirm]").forEach(function (form) {
+    form.addEventListener("submit", function (event) {
+      if (!window.confirm(form.dataset.confirm)) event.preventDefault();
+    });
+  });
+</script>
 {% endblock %}

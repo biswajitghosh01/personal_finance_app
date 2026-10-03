@@ -116,6 +116,7 @@ summary.values[code]['count'] + 1 }) %} {% endif %} {% endfor %}
                 method="post"
                 action="{{ url_for('mutual_fund_delete', fund_id=row.id) }}"
                 class="mf-actions-form"
+                data-confirm="Delete {{ row.fund_name }}?"
               >
                 <input
                   type="hidden"
@@ -136,4 +137,12 @@ summary.values[code]['count'] + 1 }) %} {% endif %} {% endfor %}
     </div>
   </section>
 </div>
+{% endblock %} {% block scripts %}
+<script>
+  document.querySelectorAll("form[data-confirm]").forEach(function (form) {
+    form.addEventListener("submit", function (event) {
+      if (!window.confirm(form.dataset.confirm)) event.preventDefault();
+    });
+  });
+</script>
 {% endblock %}

@@ -544,6 +544,9 @@ button:active {
 .kpi-card.accent-pink::after {
   background: var(--pink);
 }
+.kpi-card.accent-gold::after {
+  background: var(--gold);
+}
 
 .kpi-label {
   font-size: 12px;
