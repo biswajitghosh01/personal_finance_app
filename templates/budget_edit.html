@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% set is_edit = budget_id is defined and budget_id %}
+{% block title %}{{ 'Edit' if is_edit else 'Add' }} Budget{% endblock %}
+{% block page_heading %}Budgets{% endblock %}
+
+{% block content %}
+<section class="page-intro">
+  <div>
+    <span class="eyebrow">{{ 'EDIT RECORD' if is_edit else 'NEW RECORD' }}</span>
+    <h1>{{ 'Edit' if is_edit else 'Add' }} Budget</h1>
+    <p>Set a monthly spending limit for a category.</p>
+  </div>
+  <a class="button secondary" href="{{ url_for('budgets') }}">Cancel</a>
+</section>
+
+<form method="post" class="panel form-grid">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <label class="full">
+    Category
+    <input name="category" maxlength="100" list="budget-categories"
+           value="{{ budget['category']|default('', true) }}"
+           required autocomplete="off" spellcheck="false">
+    <datalist id="budget-categories">
+      {% for cat in [
+        'Food & Dining', 'Groceries', 'Rent', 'Utilities', 'Transportation',
+        'Healthcare', 'Entertainment', 'Shopping', 'Education', 'Insurance',
+        'Travel', 'EMI / Loan', 'Savings / Investment', 'Miscellaneous'
+      ] %}
+        <option value="{{ cat }}"></option>
+      {% endfor %}
+      {% for cat in used_categories|default([]) %}
+        <option value="{{ cat }}"></option>
+      {% endfor %}
+    </datalist>
+    <small class="field-hint">
+      Must match the category used on your Expense transactions.
+    </small>
+  </label>
+
+  <label>
+    Monthly Limit
+    <input type="number" name="monthly_limit" step="0.01" min="0.01"
+           value="{{ budget['monthly_limit']|default('', true) }}" required>
+  </label>
+
+  <label>
+    Currency
+    <select name="currency" required>
+      {% for item in currencies %}
+      <option value="{{ item }}" {% if budget['currency']|default('INR', true) == item %}selected{% endif %}>
+        {{ currency_symbol(item) }} {{ item }}
+      </option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label class="full">
+    Notes
+    <textarea name="notes" maxlength="500" rows="3">{{ budget['notes']|default('', true) }}</textarea>
+  </label>
+
+  <div class="full form-actions">
+    <a class="button secondary" href="{{ url_for('budgets') }}">Cancel</a>
+    <button type="submit">{{ 'Update' if is_edit else 'Save' }} Budget</button>
+  </div>
+</form>
+{% endblock %}

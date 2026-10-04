@@ -1,0 +1,182 @@
+{% extends 'base.html' %} {% block title %}Budgets{% endblock %} {% block
+page_heading %}Budgets{% endblock %} {% block styles %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', filename='record_actions.css') }}"
+/>
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', filename='portfolio_summary.css') }}"
+/>
+<link rel="stylesheet" href="{{ url_for('static', filename='budgets.css') }}" />
+{% endblock %} {% block content %}
+<div class="portfolio-page">
+  <section class="page-intro">
+    <div>
+      <span class="eyebrow">MONTHLY BUDGETS</span>
+      <h1>Budget Tracker</h1>
+      <p>Set a monthly limit per category and track spending against it.</p>
+    </div>
+    <a class="button" href="{{ url_for('budget_new') }}">+ Add Budget</a>
+  </section>
+
+  <div class="budget-month-nav" aria-label="Month selector">
+    <a class="month-nav-btn" href="{{ url_for('budgets', month=prev_month) }}"
+      >‹ {{ prev_month }}</a
+    >
+    <strong>{{ selected_month }}</strong>
+    <a class="month-nav-btn" href="{{ url_for('budgets', month=next_month) }}"
+      >{{ next_month }} ›</a
+    >
+  </div>
+
+  {% if summary %}
+  <section class="summary-cards" aria-label="Budget summary">
+    {% for code, total in summary.items() %} {% set remaining = total['limit'] -
+    total['spent'] %} {% set pct = (total['spent'] / total['limit'] * 100) if
+    total['limit'] else 0 %}
+    <article class="summary-card accent-gold">
+      <div class="summary-head">
+        <div>
+          <span class="kpi-label">Monthly budget · {{ code }}</span>
+          <strong class="summary-total">
+            {{ currency_symbol(code) }} {{ '{:,.2f}'.format(total['limit']) }}
+          </strong>
+        </div>
+        <span class="summary-currency">{{ code }}</span>
+      </div>
+
+      <div class="summary-metrics">
+        <div>
+          <small>Spent</small>
+          <strong
+            >{{ currency_symbol(code) }} {{ '{:,.2f}'.format(total['spent'])
+            }}</strong
+          >
+        </div>
+        <div>
+          <small>Remaining</small>
+          <strong class="{{ 'positive' if remaining >= 0 else 'negative' }}">
+            {{ currency_symbol(code) }} {{ '{:,.2f}'.format(remaining) }}
+          </strong>
+        </div>
+        <div>
+          <small>Used</small>
+          <strong>{{ '%.1f'|format(pct) }}%</strong>
+        </div>
+        <div>
+          <small>Categories</small>
+          <strong>{{ total['count'] }}</strong>
+        </div>
+      </div>
+
+      {% if total['over_count'] %}
+      <div class="budget-over-note">
+        {{ total['over_count'] }} {{ 'category' if total['over_count'] == 1 else
+        'categories' }} over budget
+      </div>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </section>
+  {% endif %} {% if rows %}
+  <section class="panel data-panel">
+    <div class="panel-heading lots-panel-heading">
+      <div>
+        <span class="eyebrow">CATEGORY BUDGETS</span>
+        <h2>{{ selected_month }}</h2>
+      </div>
+      <span class="badge"
+        >{{ rows|length }} {{ 'category' if rows|length == 1 else 'categories'
+        }}</span
+      >
+    </div>
+
+    <div class="budget-list">
+      {% for row in rows %} {% set pct = [row.percent, 100]|min %} {% set
+      bar_class = 'over' if row.over else ('warning' if row.percent >= 80 else
+      'ok') %}
+      <article class="budget-row {{ 'is-over' if row.over else '' }}">
+        <div class="budget-row-head">
+          <div>
+            <strong class="budget-category">{{ row.category }}</strong>
+            <small class="budget-currency">
+              {{ row.currency }}{% if row.notes %} · {{ row.notes }}{% endif %}
+            </small>
+          </div>
+          <div class="budget-row-actions">
+            <a
+              class="icon-button edit"
+              href="{{ url_for('budget_edit', budget_id=row.id) }}"
+              >Edit</a
+            >
+            <form
+              method="post"
+              action="{{ url_for('budget_delete', budget_id=row.id) }}"
+              data-confirm="Delete budget for {{ row.category }}?"
+            >
+              <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+              />
+              <button class="icon-button danger" type="submit">Delete</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="budget-amounts">
+          <span
+            >Spent
+            <strong
+              >{{ currency_symbol(row.currency) }} {{
+              '{:,.2f}'.format(row.spent) }}</strong
+            ></span
+          >
+          <span
+            >Limit
+            <strong
+              >{{ currency_symbol(row.currency) }} {{
+              '{:,.2f}'.format(row.limit) }}</strong
+            ></span
+          >
+          <span class="{{ 'positive' if row.remaining >= 0 else 'negative' }}">
+            {% if row.remaining >= 0 %}Left{% else %}Over{% endif %}
+            <strong
+              >{{ currency_symbol(row.currency) }} {{
+              '{:,.2f}'.format(row.remaining|abs) }}</strong
+            >
+          </span>
+        </div>
+
+        <div class="budget-progress">
+          <div
+            class="budget-progress-fill {{ bar_class }}"
+            style="width: {{ pct }}%;"
+          ></div>
+        </div>
+
+        <div class="budget-progress-meta">
+          <span>{{ '%.1f'|format(row.percent) }}% used</span>
+          <span>{{ selected_month }}</span>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% else %}
+  <section class="summary-empty">
+    <strong>No budgets yet</strong>
+    <p>Add a monthly budget to start tracking spending by category.</p>
+  </section>
+  {% endif %}
+</div>
+{% endblock %} {% block scripts %}
+<script>
+  document.querySelectorAll("form[data-confirm]").forEach(function (form) {
+    form.addEventListener("submit", function (event) {
+      if (!window.confirm(form.dataset.confirm)) event.preventDefault();
+    });
+  });
+</script>
+{% endblock %}

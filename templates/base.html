@@ -12,7 +12,7 @@
     />
     <link
       rel="stylesheet"
-      href="{{ url_for('static', filename='style.css', v=18) }}"
+      href="{{ url_for('static', filename='style.css', v=19) }}"
     />
     {% block styles %}{% endblock %}
   </head>
@@ -87,6 +87,9 @@
             <h2 class="nav-group-title" id="nav-planning">Planning</h2>
             <a class="nav-link" href="{{ url_for('retirals') }}"
               ><span aria-hidden="true">⇄</span>Retirals</a
+            >
+            <a class="nav-link" href="{{ url_for('budgets') }}"
+              ><span aria-hidden="true">▦</span>Budgets</a
             >
             <a
               class="nav-link"

@@ -1,30 +1,39 @@
-import os, re, sqlite3
-from datetime import date as today_date, datetime, timedelta, timezone
+import os
+import re
+import sqlite3
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from functools import wraps
 from pathlib import Path
-from urllib.parse import urlparse
+
 import click
 from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError, VerificationError
+from argon2.exceptions import VerificationError, VerifyMismatchError
 from cryptography.fernet import Fernet, InvalidToken
-from flask import Flask, abort, flash, g, redirect, render_template, request, session, url_for
+from flask import (
+    Flask, abort, flash, g, redirect, render_template, request, session, url_for,
+)
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
 from waitress import serve
 from werkzeug.middleware.proxy_fix import ProxyFix
+
 from admin_routes import admin_bp, ensure_admin_schema
 
+# ---------------------------------------------------------------- environment
 BASE = Path(__file__).resolve().parent
 DB_PATH = BASE / 'instance' / 'finance.db'
 ENV_PATH = BASE / '.env'
+
 if not ENV_PATH.exists():
     raise RuntimeError('Missing .env. Start the application with ./setup.sh')
+
 for line in ENV_PATH.read_text(encoding='utf-8').splitlines():
     if '=' in line and not line.lstrip().startswith('#'):
         key, value = line.split('=', 1)
         os.environ.setdefault(key.strip(), value.strip())
+
 for key in ('SECRET_KEY', 'DATA_KEY', 'DEFAULT_USER', 'DEFAULT_PASSWORD'):
     if not os.getenv(key):
         raise RuntimeError(f'Missing required setting: {key}')
@@ -43,7 +52,9 @@ TRUSTED_PROXY_COUNT = max(0, int(os.environ.get('TRUSTED_PROXY_COUNT', '0')))
 BIND_HOST = os.environ.get('BIND_HOST', '127.0.0.1').strip() or '127.0.0.1'
 BIND_PORT = int(os.environ.get('BIND_PORT', '5555'))
 
+# ---------------------------------------------------------------- flask setup
 app = Flask(__name__, template_folder='templates', static_folder='static')
+
 if TRUSTED_PROXY_COUNT:
     app.wsgi_app = ProxyFix(
         app.wsgi_app,
@@ -51,6 +62,7 @@ if TRUSTED_PROXY_COUNT:
         x_proto=TRUSTED_PROXY_COUNT,
         x_host=TRUSTED_PROXY_COUNT,
     )
+
 app.config.update(
     SECRET_KEY=os.environ['SECRET_KEY'],
     SESSION_COOKIE_HTTPONLY=True,
@@ -60,19 +72,32 @@ app.config.update(
     MAX_CONTENT_LENGTH=256 * 1024,
     WTF_CSRF_TIME_LIMIT=3600,
 )
+
 CSRFProtect(app)
-limiter = Limiter(get_remote_address, app=app, default_limits=['300 per hour'], storage_uri='memory://')
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=['300 per hour'],
+    storage_uri='memory://',
+)
 password_hasher = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4)
 cipher = Fernet(os.environ['DATA_KEY'].encode())
 app.extensions['finance_cipher'] = cipher
 app.register_blueprint(admin_bp)
 
+# ---------------------------------------------------------------- constants
 CATEGORIES = {
-    'BANK': 'Bank Accounts', 'FIXED_DEPOSIT': 'Fixed Deposits',
-    'RECURRING_DEPOSIT': 'Recurring Deposits', 'SHARE': 'Stocks',
-    'MUTUAL_FUND': 'Mutual Funds', 'METAL': 'Metals', 'ESOP': 'ESOPs',
-    'LIABILITY': 'Liabilities', 'OTHER': 'Other investments'
+    'BANK': 'Bank Accounts',
+    'FIXED_DEPOSIT': 'Fixed Deposits',
+    'RECURRING_DEPOSIT': 'Recurring Deposits',
+    'SHARE': 'Stocks',
+    'MUTUAL_FUND': 'Mutual Funds',
+    'METAL': 'Metals',
+    'ESOP': 'ESOPs',
+    'LIABILITY': 'Liabilities',
+    'OTHER': 'Other investments',
 }
+
 CURRENCIES = ('INR', 'USD', 'EUR', 'GBP', 'SGD', 'AED', 'JPY', 'CAD', 'AUD')
 CURRENCY_SYMBOLS = {
     'INR': '₹',
@@ -83,15 +108,38 @@ CURRENCY_SYMBOLS = {
     'AED': 'AED',
     'JPY': '¥',
     'CAD': 'C$',
-    'AUD': 'A$'
+    'AUD': 'A$',
 }
+
+TRANSACTION_TYPES = (
+    'INCOME', 'EXPENSE', 'TRANSFER', 'INVESTMENT', 'LIABILITY_PAYMENT',
+)
+
+LIABILITY_TYPES = ('Personal Loan', 'Home Loan', 'Auto Loan', 'Other')
+LIABILITY_STATUSES = ('Active', 'Paid Off', 'In Dispute', 'Deferred')
+PAYMENT_FREQUENCIES = (
+    'Monthly', 'Quarterly', 'Bi-weekly', 'Weekly',
+    'Semi-annual', 'Annual', 'On Demand',
+)
+PAYMENT_METHODS = (
+    'Auto-pay', 'ACH Transfer', 'Wire', 'Check',
+    'Cash', 'Standing Instruction', 'Other',
+)
+
+ACCOUNT_TYPES = ('Savings', 'Current', 'Salary', 'NRE', 'NRO', 'FCNR', 'Other')
+RETIRAL_FUND_TYPES = (
+    'EPF', 'PPF', 'NPS', 'Superannuation',
+    'Pension Fund', 'Gratuity', '401(k)', 'Other',
+)
+METAL_TYPES = ('Gold', 'Silver', 'Platinum', 'Palladium', 'Other')
+METAL_PRODUCT_FORMS = (
+    'Coin', 'Bar', 'Round', 'ETF', 'Digital Gold', 'Jewellery', 'Other',
+)
 
 
 def currency_symbol(code):
     return CURRENCY_SYMBOLS.get(code, code)
 
-
-TRANSACTION_TYPES = ('INCOME', 'EXPENSE', 'TRANSFER', 'INVESTMENT', 'LIABILITY_PAYMENT')
 
 SCHEMA = '''
 PRAGMA foreign_keys=ON;
@@ -208,6 +256,14 @@ CREATE TABLE IF NOT EXISTS transactions (
  account_name TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS budgets (
+ id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL,
+ category TEXT NOT NULL, monthly_limit TEXT NOT NULL DEFAULT '0',
+ currency TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_budgets_user_category ON budgets(user_id, category);
 CREATE TABLE IF NOT EXISTS audit_log (
  id INTEGER PRIMARY KEY, user_id INTEGER, action TEXT NOT NULL, entity_id INTEGER,
  event_time TEXT NOT NULL, remote_addr TEXT NOT NULL
@@ -217,6 +273,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, t
 '''
 
 
+# ---------------------------------------------------------------- helpers
 def now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -240,11 +297,15 @@ def close_db(_=None):
 def _run_schema_migrations(connection):
     connection.executescript(SCHEMA)
 
-    liability_columns = {row[1] for row in connection.execute('PRAGMA table_info(liabilities)').fetchall()}
+    liability_columns = {
+        row[1] for row in connection.execute('PRAGMA table_info(liabilities)').fetchall()
+    }
     if 'emi_date' not in liability_columns:
-        connection.execute("ALTER TABLE liabilities ADD COLUMN emi_date TEXT")
+        connection.execute('ALTER TABLE liabilities ADD COLUMN emi_date TEXT')
 
-    stock_columns = {row[1] for row in connection.execute('PRAGMA table_info(stocks)').fetchall()}
+    stock_columns = {
+        row[1] for row in connection.execute('PRAGMA table_info(stocks)').fetchall()
+    }
     for column, definition in {
         'sale_date': 'TEXT',
         'sale_units': "TEXT NOT NULL DEFAULT '0'",
@@ -276,6 +337,7 @@ def ensure_default_user(connection=None):
 
     try:
         connection.executescript(SCHEMA)
+
         existing = connection.execute(
             'SELECT id, password_hash FROM users WHERE username=?',
             (username,),
@@ -290,12 +352,8 @@ def ensure_default_user(connection=None):
             connection.commit()
             return username
 
-        if isinstance(existing, sqlite3.Row):
-            stored_hash = existing['password_hash'] or ''
-            user_id = existing['id']
-        else:
-            stored_hash = existing[1] or ''
-            user_id = existing[0]
+        stored_hash = (existing['password_hash'] or '') if isinstance(existing, sqlite3.Row) else (existing[1] or '')
+        user_id = existing['id'] if isinstance(existing, sqlite3.Row) else existing[0]
 
         if len(stored_hash) < 40 or not stored_hash.startswith('$argon2'):
             connection.execute(
@@ -362,7 +420,8 @@ def _print_startup_credentials():
 
 def audit(action, entity_id=None):
     get_db().execute(
-        'INSERT INTO audit_log(user_id,action,entity_id,event_time,remote_addr) VALUES(?,?,?,?,?)',
+        'INSERT INTO audit_log(user_id,action,entity_id,event_time,remote_addr) '
+        'VALUES(?,?,?,?,?)',
         (session.get('uid'), action, entity_id, now(), request.remote_addr or 'unknown'),
     )
     get_db().commit()
@@ -379,6 +438,7 @@ def login_required(function):
     return wrapper
 
 
+# ---------------------------------------------------------------- validators
 def clean_text(value, length, required=False):
     value = (value or '').strip()
     if required and not value:
@@ -422,34 +482,7 @@ app.jinja_env.globals['decrypt_mask'] = decrypt_mask
 app.jinja_env.globals['currency_symbol'] = currency_symbol
 
 
-def parse_asset(form):
-    category = form.get('category', '')
-    currency = form.get('currency', '').upper()
-    if category in {'BANK', 'FIXED_DEPOSIT', 'SHARE', 'ESOP', 'MUTUAL_FUND', 'METAL', 'LIABILITY'}:
-        raise ValueError('Use the dedicated page for this category.')
-    if category not in CATEGORIES or currency not in CURRENCIES:
-        raise ValueError('Invalid category or currency.')
-    country = clean_text(form.get('country'), 60)
-    if category == 'SHARE' and country not in ('India', 'United States'):
-        raise ValueError('Stocks must use India or United States as the market.')
-    reference = clean_text(form.get('account_ref'), 80)
-    return (
-        category,
-        clean_text(form.get('name'), 120, True),
-        clean_text(form.get('institution'), 120),
-        country,
-        currency,
-        clean_number(form.get('quantity')),
-        clean_number(form.get('current_price')),
-        clean_number(form.get('principal')),
-        clean_number(form.get('interest_rate')),
-        clean_date(form.get('start_date')),
-        clean_date(form.get('maturity_date')),
-        cipher.encrypt(reference.encode()) if reference else None,
-        clean_text(form.get('notes'), 1000),
-    )
-
-
+# ---------------------------------------------------------------- request hooks
 @app.before_request
 def security_gate():
     if request.host.split(':')[0].lower() not in ALLOWED_HOSTS:
@@ -493,22 +526,35 @@ def security_headers(response):
     return response
 
 
+# ---------------------------------------------------------------- auth
 @app.route('/login', methods=['GET', 'POST'])
 @limiter.limit('5 per minute; 20 per hour')
 def login():
     if request.method == 'POST':
         username = clean_text(request.form.get('username'), 80)
-        user = get_db().execute('SELECT * FROM users WHERE username=?', (username,)).fetchone()
+        user = get_db().execute(
+            'SELECT * FROM users WHERE username=?', (username,),
+        ).fetchone()
+
         valid = False
-        if user and (not user['locked_until'] or datetime.fromisoformat(user['locked_until']) <= datetime.now(timezone.utc)):
+        if user and (
+            not user['locked_until']
+            or datetime.fromisoformat(user['locked_until']) <= datetime.now(timezone.utc)
+        ):
             try:
-                valid = password_hasher.verify(user['password_hash'], request.form.get('password', ''))
+                valid = password_hasher.verify(
+                    user['password_hash'], request.form.get('password', ''),
+                )
             except (VerifyMismatchError, VerificationError):
                 pass
+
         if not valid:
             if user:
                 failures = user['failed'] + 1
-                locked = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat() if failures >= 5 else None
+                locked = (
+                    (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
+                    if failures >= 5 else None
+                )
                 get_db().execute(
                     'UPDATE users SET failed=?,locked_until=? WHERE id=?',
                     (0 if locked else failures, locked, user['id']),
@@ -569,6 +615,7 @@ def logout():
     return redirect(url_for('login'))
 
 
+# ---------------------------------------------------------------- dashboard
 @app.route('/', methods=['GET'])
 @app.route('/dashboard', methods=['GET'])
 @login_required
@@ -585,8 +632,6 @@ def dashboard():
         target[currency] = target.get(currency, Decimal(0)) + amount
         return amount
 
-    # Bank accounts — counted in assets for net worth, and tracked
-    # separately so the dashboard can show them on their own card.
     for row in db.execute('SELECT currency, current_balance FROM bank_accounts WHERE user_id=?', (uid,)):
         value = add(assets, row['currency'], row['current_balance'])
         add(bank_balances, row['currency'], row['current_balance'])
@@ -635,11 +680,14 @@ def dashboard():
         value = add(liabilities, row['currency'], row['current_balance'])
         liability_breakdown[row['liability_type']] = liability_breakdown.get(row['liability_type'], Decimal(0)) + value
 
-    dedicated_categories = {'BANK', 'FIXED_DEPOSIT', 'RECURRING_DEPOSIT', 'SHARE', 'MUTUAL_FUND', 'METAL', 'LIABILITY'}
+    dedicated = {'BANK', 'FIXED_DEPOSIT', 'RECURRING_DEPOSIT', 'SHARE', 'MUTUAL_FUND', 'METAL', 'LIABILITY'}
     for row in db.execute('SELECT * FROM assets WHERE user_id=?', (uid,)):
-        if row['category'] in dedicated_categories:
+        if row['category'] in dedicated:
             continue
-        value = Decimal(row['principal']) if row['category'] == 'RECURRING_DEPOSIT' else Decimal(row['quantity']) * Decimal(row['current_price'])
+        value = (
+            Decimal(row['principal']) if row['category'] == 'RECURRING_DEPOSIT'
+            else Decimal(row['quantity']) * Decimal(row['current_price'])
+        )
         add(assets, row['currency'], value)
         allocation[row['category']] = allocation.get(row['category'], Decimal(0)) + value
 
@@ -686,6 +734,10 @@ def dashboard():
         },
     }
 
+    today = datetime.now(timezone.utc).date()
+    current_month = f'{today.year}-{today.month:02d}'
+    _, budget_summary = _budget_summary_for_month(db, uid, current_month)
+
     dedicated_routes = {
         'BANK': 'bank_accounts',
         'FIXED_DEPOSIT': 'fixed_deposits',
@@ -712,6 +764,7 @@ def dashboard():
         assets=assets,
         liabilities=liabilities,
         bank_balances=bank_balances,
+        budget_summary=budget_summary,
         allocation_chart=chart_data['allocation'],
         liability_chart=chart_data['liabilities'],
         chart_data=chart_data,
@@ -719,6 +772,7 @@ def dashboard():
     )
 
 
+# ---------------------------------------------------------------- sections
 @app.route('/section/<category>')
 @login_required
 def section(category):
@@ -766,32 +820,74 @@ def asset_new():
 
     other_categories = {
         k: v for k, v in CATEGORIES.items()
-        if k not in {'BANK', 'FIXED_DEPOSIT', 'RECURRING_DEPOSIT', 'SHARE', 'ESOP', 'MUTUAL_FUND', 'METAL', 'LIABILITY', 'RETIRAL'}
+        if k not in {
+            'BANK', 'FIXED_DEPOSIT', 'RECURRING_DEPOSIT', 'SHARE', 'ESOP',
+            'MUTUAL_FUND', 'METAL', 'LIABILITY', 'RETIRAL',
+        }
     }
 
     if request.method == 'POST':
         try:
-            values = parse_asset(request.form)
+            category_value = request.form.get('category', '')
+            currency = request.form.get('currency', '').upper()
+            if category_value in {
+                'BANK', 'FIXED_DEPOSIT', 'SHARE', 'ESOP',
+                'MUTUAL_FUND', 'METAL', 'LIABILITY',
+            }:
+                raise ValueError('Use the dedicated page for this category.')
+            if category_value not in CATEGORIES or currency not in CURRENCIES:
+                raise ValueError('Invalid category or currency.')
+            country = clean_text(request.form.get('country'), 60)
+            reference = clean_text(request.form.get('account_ref'), 80)
+            values = (
+                category_value,
+                clean_text(request.form.get('name'), 120, True),
+                clean_text(request.form.get('institution'), 120),
+                country,
+                currency,
+                clean_number(request.form.get('quantity')),
+                clean_number(request.form.get('current_price')),
+                clean_number(request.form.get('principal')),
+                clean_number(request.form.get('interest_rate')),
+                clean_date(request.form.get('start_date')),
+                clean_date(request.form.get('maturity_date')),
+                cipher.encrypt(reference.encode()) if reference else None,
+                clean_text(request.form.get('notes'), 1000),
+            )
         except ValueError as exc:
             flash(str(exc), 'error')
-            return render_template('asset_form.html', current=category, categories=other_categories, currencies=CURRENCIES, asset=request.form)
+            return render_template(
+                'asset_form.html',
+                current=category,
+                categories=other_categories,
+                currencies=CURRENCIES,
+                asset=request.form,
+            )
         cursor = get_db().execute(
-            'INSERT INTO assets(user_id,category,name,institution,country,currency,quantity,current_price,'
-            'principal,interest_rate,start_date,maturity_date,account_ref,notes,created_at,updated_at) '
-            'VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            'INSERT INTO assets(user_id,category,name,institution,country,currency,'
+            'quantity,current_price,principal,interest_rate,start_date,maturity_date,'
+            'account_ref,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             (session['uid'], *values, now(), now()),
         )
         get_db().commit()
         audit('ASSET_CREATE', cursor.lastrowid)
         return redirect(url_for('section', category=category))
 
-    return render_template('asset_form.html', current=category, categories=other_categories, currencies=CURRENCIES, asset={})
+    return render_template(
+        'asset_form.html',
+        current=category,
+        categories=other_categories,
+        currencies=CURRENCIES,
+        asset={},
+    )
 
 
 @app.post('/assets/<int:asset_id>/delete')
 @login_required
 def asset_delete(asset_id):
-    cursor = get_db().execute('DELETE FROM assets WHERE id=? AND user_id=?', (asset_id, session['uid']))
+    cursor = get_db().execute(
+        'DELETE FROM assets WHERE id=? AND user_id=?', (asset_id, session['uid']),
+    )
     if not cursor.rowcount:
         abort(404)
     get_db().commit()
@@ -800,10 +896,7 @@ def asset_delete(asset_id):
     return redirect(referrer if referrer and referrer.startswith(request.host_url) else url_for('dashboard'))
 
 
-# ---------------------------------------------------------------- Bank Accounts
-ACCOUNT_TYPES = ('Savings', 'Current', 'Salary', 'NRE', 'NRO', 'FCNR', 'Other')
-
-
+# ---------------------------------------------------------------- bank accounts
 def _parse_bank_account(form):
     bank_name = clean_text(form.get('bank_name'), 120, True)
     account_number = clean_text(form.get('account_number'), 80, True)
@@ -822,16 +915,8 @@ def _parse_bank_account(form):
         raise ValueError('Invalid currency.')
     notes = clean_text(form.get('notes'), 1000)
     return (
-        bank_name,
-        cipher.encrypt(account_number.encode()),
-        ifsc_code,
-        micr_code,
-        bank_address,
-        account_type,
-        current_balance,
-        interest_rate,
-        currency,
-        notes,
+        bank_name, cipher.encrypt(account_number.encode()), ifsc_code, micr_code,
+        bank_address, account_type, current_balance, interest_rate, currency, notes,
     )
 
 
@@ -842,12 +927,9 @@ def bank_accounts():
         'SELECT * FROM bank_accounts WHERE user_id=? ORDER BY bank_name,id',
         (session['uid'],),
     ).fetchall()
-    display_rows = []
-    for index, row in enumerate(rows, start=1):
-        item = dict(row)
-        item['display_id'] = index
-        display_rows.append(item)
-    return render_template('bank_accounts.html', rows=display_rows)
+    return render_template('bank_accounts.html', rows=[
+        {**dict(row), 'display_id': i + 1} for i, row in enumerate(rows)
+    ])
 
 
 @app.route('/bank-accounts/new', methods=['GET', 'POST'])
@@ -858,18 +940,30 @@ def bank_account_new():
             values = _parse_bank_account(request.form)
         except ValueError as exc:
             flash(str(exc), 'error')
-            return render_template('bank_account_edit.html', account=request.form, account_types=ACCOUNT_TYPES, currencies=CURRENCIES, is_edit=False)
+            return render_template(
+                'bank_account_edit.html',
+                account=request.form,
+                account_types=ACCOUNT_TYPES,
+                currencies=CURRENCIES,
+                is_edit=False,
+            )
         cursor = get_db().execute(
-            'INSERT INTO bank_accounts(user_id,bank_name,account_number,ifsc_code,micr_code,bank_address,'
-            'account_type,current_balance,interest_rate,currency,notes,created_at,updated_at) '
-            'VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            'INSERT INTO bank_accounts(user_id,bank_name,account_number,ifsc_code,micr_code,'
+            'bank_address,account_type,current_balance,interest_rate,currency,notes,'
+            'created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
             (session['uid'], *values, now(), now()),
         )
         get_db().commit()
         audit('BANK_ACCOUNT_CREATE', cursor.lastrowid)
         flash('Bank account saved.', 'success')
         return redirect(url_for('bank_accounts'))
-    return render_template('bank_account_edit.html', account={}, account_types=ACCOUNT_TYPES, currencies=CURRENCIES, is_edit=False)
+    return render_template(
+        'bank_account_edit.html',
+        account={},
+        account_types=ACCOUNT_TYPES,
+        currencies=CURRENCIES,
+        is_edit=False,
+    )
 
 
 @app.route('/bank-accounts/<int:account_id>/edit', methods=['GET', 'POST'])
@@ -897,10 +991,9 @@ def bank_account_edit(account_id):
                 is_edit=True,
             )
         db.execute(
-            '''UPDATE bank_accounts
-               SET bank_name=?, account_number=?, ifsc_code=?, micr_code=?, bank_address=?, account_type=?,
-                   current_balance=?, interest_rate=?, currency=?, notes=?, updated_at=?
-               WHERE id=? AND user_id=?''',
+            'UPDATE bank_accounts SET bank_name=?, account_number=?, ifsc_code=?, micr_code=?, '
+            'bank_address=?, account_type=?, current_balance=?, interest_rate=?, currency=?, '
+            'notes=?, updated_at=? WHERE id=? AND user_id=?',
             (*values, now(), account_id, session['uid']),
         )
         db.commit()
@@ -928,7 +1021,10 @@ def bank_account_edit(account_id):
 @app.post('/bank-accounts/<int:account_id>/delete')
 @login_required
 def bank_account_delete(account_id):
-    cursor = get_db().execute('DELETE FROM bank_accounts WHERE id=? AND user_id=?', (account_id, session['uid']))
+    cursor = get_db().execute(
+        'DELETE FROM bank_accounts WHERE id=? AND user_id=?',
+        (account_id, session['uid']),
+    )
     if not cursor.rowcount:
         abort(404)
     get_db().commit()
@@ -937,7 +1033,7 @@ def bank_account_delete(account_id):
     return redirect(url_for('bank_accounts'))
 
 
-# ---------------------------------------------------------------- Fixed Deposits
+# ---------------------------------------------------------------- fixed deposits
 def _fd_metrics(row):
     principal = Decimal(str(row['initial_deposit'] or '0'))
     rate_pct = Decimal(str(row['interest_rate'] or '0'))
@@ -984,6 +1080,7 @@ def _parse_fixed_deposit(form):
     interest_rate = clean_number(form.get('interest_rate'))
     currency = form.get('currency', '').upper()
     notes = clean_text(form.get('notes'), 1000)
+
     if not re.fullmatch(r'[A-Z]{4}0[A-Z0-9]{6}', ifsc_code):
         raise ValueError('Enter a valid 11-character IFSC code.')
     if not re.fullmatch(r'\d{9}', micr_code):
@@ -994,18 +1091,11 @@ def _parse_fixed_deposit(form):
         raise ValueError('Maturity date must be later than investment date.')
     if currency not in CURRENCIES:
         raise ValueError('Invalid currency.')
+
     return (
-        bank_name,
-        cipher.encrypt(account_number.encode()),
-        ifsc_code,
-        micr_code,
-        bank_address,
-        initial_deposit,
-        investment_date,
-        maturity_date,
-        interest_rate,
-        currency,
-        notes,
+        bank_name, cipher.encrypt(account_number.encode()), ifsc_code, micr_code,
+        bank_address, initial_deposit, investment_date, maturity_date,
+        interest_rate, currency, notes,
     )
 
 
@@ -1035,9 +1125,9 @@ def fixed_deposit_new():
             flash(str(exc), 'error')
             return render_template('fixed_deposit_edit.html', deposit=request.form, currencies=CURRENCIES)
         cursor = get_db().execute(
-            'INSERT INTO fixed_deposits(user_id,bank_name,account_number,ifsc_code,micr_code,bank_address,'
-            'initial_deposit,investment_date,maturity_date,interest_rate,currency,notes,created_at,updated_at) '
-            'VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            'INSERT INTO fixed_deposits(user_id,bank_name,account_number,ifsc_code,micr_code,'
+            'bank_address,initial_deposit,investment_date,maturity_date,interest_rate,currency,'
+            'notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             (session['uid'], *values, now(), now()),
         )
         get_db().commit()
@@ -1051,38 +1141,56 @@ def fixed_deposit_new():
 @login_required
 def fixed_deposit_edit(deposit_id):
     db = get_db()
-    row = db.execute('SELECT * FROM fixed_deposits WHERE id=? AND user_id=?', (deposit_id, session['uid'])).fetchone()
+    row = db.execute(
+        'SELECT * FROM fixed_deposits WHERE id=? AND user_id=?',
+        (deposit_id, session['uid']),
+    ).fetchone()
     if not row:
         abort(404)
+
     if request.method == 'POST':
         try:
             values = _parse_fixed_deposit(request.form)
         except ValueError as exc:
             flash(str(exc), 'error')
-            return render_template('fixed_deposit_edit.html', deposit=request.form, deposit_id=deposit_id, currencies=CURRENCIES)
+            return render_template(
+                'fixed_deposit_edit.html',
+                deposit=request.form,
+                deposit_id=deposit_id,
+                currencies=CURRENCIES,
+            )
         db.execute(
-            'UPDATE fixed_deposits SET bank_name=?,account_number=?,ifsc_code=?,micr_code=?,bank_address=?,'
-            'initial_deposit=?,investment_date=?,maturity_date=?,interest_rate=?,currency=?,notes=?,updated_at=? '
-            'WHERE id=? AND user_id=?',
+            'UPDATE fixed_deposits SET bank_name=?, account_number=?, ifsc_code=?, micr_code=?, '
+            'bank_address=?, initial_deposit=?, investment_date=?, maturity_date=?, interest_rate=?, '
+            'currency=?, notes=?, updated_at=? WHERE id=? AND user_id=?',
             (*values, now(), deposit_id, session['uid']),
         )
         db.commit()
         audit('FIXED_DEPOSIT_UPDATE', deposit_id)
         flash('Fixed deposit updated.', 'success')
         return redirect(url_for('fixed_deposits'))
+
     deposit = dict(row)
     try:
         deposit['account_number'] = cipher.decrypt(row['account_number']).decode()
     except (InvalidToken, UnicodeDecodeError):
         deposit['account_number'] = ''
         flash('The stored account number could not be decrypted. Enter it again before saving.', 'warning')
-    return render_template('fixed_deposit_edit.html', deposit=deposit, deposit_id=deposit_id, currencies=CURRENCIES)
+    return render_template(
+        'fixed_deposit_edit.html',
+        deposit=deposit,
+        deposit_id=deposit_id,
+        currencies=CURRENCIES,
+    )
 
 
 @app.post('/fixed-deposits/<int:deposit_id>/delete')
 @login_required
 def fixed_deposit_delete(deposit_id):
-    cursor = get_db().execute('DELETE FROM fixed_deposits WHERE id=? AND user_id=?', (deposit_id, session['uid']))
+    cursor = get_db().execute(
+        'DELETE FROM fixed_deposits WHERE id=? AND user_id=?',
+        (deposit_id, session['uid']),
+    )
     if not cursor.rowcount:
         abort(404)
     get_db().commit()
@@ -1091,7 +1199,7 @@ def fixed_deposit_delete(deposit_id):
     return redirect(url_for('fixed_deposits'))
 
 
-# ---------------------------------------------------------------- Recurring Deposits
+# ---------------------------------------------------------------- recurring deposits
 def _rd_metrics(row):
     monthly = Decimal(str(row['monthly_deposit'] or '0'))
     rate_pct = Decimal(str(row['interest_rate'] or '0'))
@@ -1134,33 +1242,28 @@ def _parse_recurring_deposit(form):
     monthly = clean_number(form.get('monthly_deposit'))
     invested = clean_number(form.get('amount_invested'))
     current = clean_number(form.get('current_value'))
+
     try:
         day = int(form.get('deposit_day', '0'))
     except ValueError:
         raise ValueError('Deposit Day must be between 1 and 31.')
     if not 1 <= day <= 31 or Decimal(monthly) <= 0:
         raise ValueError('Enter a valid Deposit Day and Monthly Deposit.')
+
     start = clean_date(form.get('start_date'))
     maturity = clean_date(form.get('maturity_date'))
     if not start or not maturity or maturity <= start:
         raise ValueError('Maturity Date must be later than Start Date.')
+
     rate = clean_number(form.get('interest_rate'))
     currency = form.get('currency', '').upper()
     if currency not in CURRENCIES:
         raise ValueError('Invalid currency.')
+
     notes = clean_text(form.get('notes'), 1000)
     return (
-        bank,
-        cipher.encrypt(account.encode()),
-        monthly,
-        day,
-        invested,
-        current,
-        start,
-        maturity,
-        rate,
-        currency,
-        notes,
+        bank, cipher.encrypt(account.encode()), monthly, day, invested,
+        current, start, maturity, rate, currency, notes,
     )
 
 
@@ -1190,9 +1293,9 @@ def recurring_deposit_new():
             flash(str(exc), 'error')
             return render_template('recurring_deposit_edit.html', deposit=request.form, currencies=CURRENCIES)
         cursor = get_db().execute(
-            'INSERT INTO recurring_deposits(user_id,bank_name,account_number,monthly_deposit,deposit_day,'
-            'amount_invested,current_value,start_date,maturity_date,interest_rate,currency,notes,created_at,updated_at) '
-            'VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            'INSERT INTO recurring_deposits(user_id,bank_name,account_number,monthly_deposit,'
+            'deposit_day,amount_invested,current_value,start_date,maturity_date,interest_rate,'
+            'currency,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
             (session['uid'], *values, now(), now()),
         )
         get_db().commit()
@@ -1206,37 +1309,55 @@ def recurring_deposit_new():
 @login_required
 def recurring_deposit_edit(deposit_id):
     db = get_db()
-    row = db.execute('SELECT * FROM recurring_deposits WHERE id=? AND user_id=?', (deposit_id, session['uid'])).fetchone()
+    row = db.execute(
+        'SELECT * FROM recurring_deposits WHERE id=? AND user_id=?',
+        (deposit_id, session['uid']),
+    ).fetchone()
     if not row:
         abort(404)
+
     if request.method == 'POST':
         try:
             values = _parse_recurring_deposit(request.form)
         except ValueError as exc:
             flash(str(exc), 'error')
-            return render_template('recurring_deposit_edit.html', deposit=request.form, deposit_id=deposit_id, currencies=CURRENCIES)
+            return render_template(
+                'recurring_deposit_edit.html',
+                deposit=request.form,
+                deposit_id=deposit_id,
+                currencies=CURRENCIES,
+            )
         db.execute(
-            'UPDATE recurring_deposits SET bank_name=?,account_number=?,monthly_deposit=?,deposit_day=?,'
-            'amount_invested=?,current_value=?,start_date=?,maturity_date=?,interest_rate=?,currency=?,'
-            'notes=?,updated_at=? WHERE id=? AND user_id=?',
+            'UPDATE recurring_deposits SET bank_name=?, account_number=?, monthly_deposit=?, '
+            'deposit_day=?, amount_invested=?, current_value=?, start_date=?, maturity_date=?, '
+            'interest_rate=?, currency=?, notes=?, updated_at=? WHERE id=? AND user_id=?',
             (*values, now(), deposit_id, session['uid']),
         )
         db.commit()
         audit('RECURRING_DEPOSIT_UPDATE', deposit_id)
         flash('Recurring deposit updated.', 'success')
         return redirect(url_for('recurring_deposits'))
+
     deposit = dict(row)
     try:
         deposit['account_number'] = cipher.decrypt(row['account_number']).decode()
     except (InvalidToken, UnicodeDecodeError):
         deposit['account_number'] = ''
-    return render_template('recurring_deposit_edit.html', deposit=deposit, deposit_id=deposit_id, currencies=CURRENCIES)
+    return render_template(
+        'recurring_deposit_edit.html',
+        deposit=deposit,
+        deposit_id=deposit_id,
+        currencies=CURRENCIES,
+    )
 
 
 @app.post('/recurring-deposits/<int:deposit_id>/delete')
 @login_required
 def recurring_deposit_delete(deposit_id):
-    cursor = get_db().execute('DELETE FROM recurring_deposits WHERE id=? AND user_id=?', (deposit_id, session['uid']))
+    cursor = get_db().execute(
+        'DELETE FROM recurring_deposits WHERE id=? AND user_id=?',
+        (deposit_id, session['uid']),
+    )
     if not cursor.rowcount:
         abort(404)
     get_db().commit()
@@ -1245,7 +1366,7 @@ def recurring_deposit_delete(deposit_id):
     return redirect(url_for('recurring_deposits'))
 
 
-# ---------------------------------------------------------------- Stocks
+# ---------------------------------------------------------------- stocks
 def _stock_form_values(form):
     stock_name = clean_text(form.get('stock_name'), 120, True)
     market = form.get('market', '')
@@ -1266,6 +1387,7 @@ def _stock_form_values(form):
         raise ValueError('Indian stocks must use INR.')
     if market == 'United States' and currency != 'USD':
         raise ValueError('US stocks must use USD.')
+
     sale_date = clean_date(form.get('sale_date'))
     sale_units = clean_number(form.get('sale_units'))
     sell_price = clean_number(form.get('sell_price'))
@@ -1275,27 +1397,17 @@ def _stock_form_values(form):
         raise ValueError('Sale Date and Sell Price are required when Sale Units are entered.')
     if sale_date and sale_date < buy_date:
         raise ValueError('Sale Date cannot be before Buy Transaction Date.')
-    gst = clean_number(form.get('gst'))
-    brokerage = clean_number(form.get('brokerage'))
-    stt = clean_number(form.get('stt'))
-    exchange_fees = clean_number(form.get('exchange_fees'))
+
+    fees = (
+        clean_number(form.get('gst')),
+        clean_number(form.get('brokerage')),
+        clean_number(form.get('stt')),
+        clean_number(form.get('exchange_fees')),
+    )
     notes = clean_text(form.get('notes'), 1000)
     return (
-        stock_name,
-        market,
-        units,
-        buy_price,
-        current_price,
-        buy_date,
-        currency,
-        sale_date,
-        sale_units,
-        sell_price,
-        gst,
-        brokerage,
-        stt,
-        exchange_fees,
-        notes,
+        stock_name, market, units, buy_price, current_price, buy_date, currency,
+        sale_date, sale_units, sell_price, *fees, notes,
     )
 
 
@@ -1313,8 +1425,7 @@ def stocks():
                COALESCE(brokerage,'0') AS brokerage,
                COALESCE(stt,'0') AS stt,
                COALESCE(exchange_fees,'0') AS exchange_fees
-        FROM stocks
-        WHERE user_id=?
+        FROM stocks WHERE user_id=?
         ORDER BY UPPER(TRIM(stock_name)), buy_transaction_date, id
         ''',
         (uid,),
@@ -1322,7 +1433,8 @@ def stocks():
 
     rows = db.execute(
         '''
-        SELECT MIN(id) AS first_id, MIN(stock_name) AS stock_name, market, currency, COUNT(*) AS lot_count,
+        SELECT MIN(id) AS first_id, MIN(stock_name) AS stock_name, market, currency,
+        COUNT(*) AS lot_count,
         SUM(CAST(number_of_shares AS REAL)) AS total_purchased_units,
         SUM(CAST(COALESCE(sale_units,'0') AS REAL)) AS total_sold_units,
         SUM(MAX(0, CAST(number_of_shares AS REAL) - CAST(COALESCE(sale_units,'0') AS REAL))) AS balance_units,
@@ -1335,8 +1447,7 @@ def stocks():
             / CAST(number_of_shares AS REAL)) AS total_cost_price,
         SUM(MAX(0, CAST(number_of_shares AS REAL) - CAST(COALESCE(sale_units,'0') AS REAL))
             * CAST(current_price AS REAL)) AS current_holding_value
-        FROM stocks
-        WHERE user_id=?
+        FROM stocks WHERE user_id=?
         GROUP BY UPPER(TRIM(stock_name)), market, currency
         ORDER BY UPPER(TRIM(stock_name))
         ''',
@@ -1347,7 +1458,9 @@ def stocks():
     for row in rows:
         item = dict(row)
         item['profit_loss'] = item['current_holding_value'] - item['total_cost_price']
-        item['return_percentage'] = (item['profit_loss'] / item['total_cost_price'] * 100) if item['total_cost_price'] else 0
+        item['return_percentage'] = (
+            item['profit_loss'] / item['total_cost_price'] * 100
+        ) if item['total_cost_price'] else 0
         holdings.append(item)
 
     return render_template('stocks.html', rows=holdings, lots=lots)
@@ -1365,8 +1478,7 @@ def stock_new():
         cursor = get_db().execute(
             '''INSERT INTO stocks(user_id,stock_name,market,number_of_shares,buy_price,current_price,
                buy_transaction_date,currency,sale_date,sale_units,sell_price,gst,brokerage,stt,
-               exchange_fees,notes,created_at,updated_at)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+               exchange_fees,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
             (session['uid'], *values, now(), now()),
         )
         get_db().commit()
@@ -1380,7 +1492,9 @@ def stock_new():
 @login_required
 def stock_edit(stock_id):
     db = get_db()
-    row = db.execute('SELECT * FROM stocks WHERE id=? AND user_id=?', (stock_id, session['uid'])).fetchone()
+    row = db.execute(
+        'SELECT * FROM stocks WHERE id=? AND user_id=?', (stock_id, session['uid']),
+    ).fetchone()
     if not row:
         abort(404)
     if request.method == 'POST':
@@ -1413,23 +1527,15 @@ def stock_delete(stock_id):
     ).fetchone()
     if not row:
         abort(404)
-
     cursor = db.execute(
-        'DELETE FROM stocks '
-        'WHERE user_id=? '
-        '  AND UPPER(TRIM(stock_name)) = UPPER(TRIM(?)) '
-        '  AND market = ? '
-        '  AND currency = ?',
+        'DELETE FROM stocks WHERE user_id=? '
+        'AND UPPER(TRIM(stock_name))=UPPER(TRIM(?)) AND market=? AND currency=?',
         (session['uid'], row['stock_name'], row['market'], row['currency']),
     )
     db.commit()
     audit('STOCK_DELETE_GROUP', stock_id)
-
     removed = cursor.rowcount
-    flash(
-        f"Deleted {removed} stock {'lot' if removed == 1 else 'lots'} for {row['stock_name']}.",
-        'success',
-    )
+    flash(f"Deleted {removed} stock {'lot' if removed == 1 else 'lots'} for {row['stock_name']}.", 'success')
     return redirect(url_for('stocks'))
 
 
@@ -1438,8 +1544,7 @@ def stock_delete(stock_id):
 def stock_delete_lot(stock_id):
     """Delete a single stock lot."""
     cursor = get_db().execute(
-        'DELETE FROM stocks WHERE id=? AND user_id=?',
-        (stock_id, session['uid']),
+        'DELETE FROM stocks WHERE id=? AND user_id=?', (stock_id, session['uid']),
     )
     if not cursor.rowcount:
         abort(404)
@@ -1483,12 +1588,12 @@ def esops():
 
     rows = db.execute(
         '''
-        SELECT MIN(id) AS first_id, MIN(company_name) AS company_name, currency, COUNT(*) AS lot_count,
+        SELECT MIN(id) AS first_id, MIN(company_name) AS company_name, currency,
+        COUNT(*) AS lot_count,
         SUM(CAST(number_of_units AS REAL)) AS total_units,
         SUM(CAST(number_of_units AS REAL) * CAST(grant_price AS REAL)) AS total_cost_price,
         SUM(CAST(number_of_units AS REAL) * CAST(current_price AS REAL)) AS current_holding_value
-        FROM esops
-        WHERE user_id=?
+        FROM esops WHERE user_id=?
         GROUP BY UPPER(TRIM(company_name)), currency
         ORDER BY UPPER(TRIM(company_name))
         ''',
@@ -1500,7 +1605,9 @@ def esops():
         item = dict(row)
         item['display_id'] = index
         item['profit_loss'] = item['current_holding_value'] - item['total_cost_price']
-        item['return_percentage'] = (item['profit_loss'] / item['total_cost_price'] * 100) if item['total_cost_price'] else 0
+        item['return_percentage'] = (
+            item['profit_loss'] / item['total_cost_price'] * 100
+        ) if item['total_cost_price'] else 0
         holdings.append(item)
 
     detail_rows = []
@@ -1538,7 +1645,9 @@ def esop_new():
 @login_required
 def esop_edit(esop_id):
     db = get_db()
-    row = db.execute('SELECT * FROM esops WHERE id=? AND user_id=?', (esop_id, session['uid'])).fetchone()
+    row = db.execute(
+        'SELECT * FROM esops WHERE id=? AND user_id=?', (esop_id, session['uid']),
+    ).fetchone()
     if not row:
         abort(404)
     if request.method == 'POST':
@@ -1571,22 +1680,15 @@ def esop_delete(esop_id):
     ).fetchone()
     if not row:
         abort(404)
-
     cursor = db.execute(
-        'DELETE FROM esops '
-        'WHERE user_id=? '
-        '  AND UPPER(TRIM(company_name)) = UPPER(TRIM(?)) '
-        '  AND currency = ?',
+        'DELETE FROM esops WHERE user_id=? '
+        'AND UPPER(TRIM(company_name))=UPPER(TRIM(?)) AND currency=?',
         (session['uid'], row['company_name'], row['currency']),
     )
     db.commit()
     audit('ESOP_DELETE_GROUP', esop_id)
-
     removed = cursor.rowcount
-    flash(
-        f"Deleted {removed} ESOP {'grant' if removed == 1 else 'grants'} for {row['company_name']}.",
-        'success',
-    )
+    flash(f"Deleted {removed} ESOP {'grant' if removed == 1 else 'grants'} for {row['company_name']}.", 'success')
     return redirect(url_for('esops'))
 
 
@@ -1595,8 +1697,7 @@ def esop_delete(esop_id):
 def esop_delete_lot(esop_id):
     """Delete a single ESOP grant."""
     cursor = get_db().execute(
-        'DELETE FROM esops WHERE id=? AND user_id=?',
-        (esop_id, session['uid']),
+        'DELETE FROM esops WHERE id=? AND user_id=?', (esop_id, session['uid']),
     )
     if not cursor.rowcount:
         abort(404)
@@ -1606,7 +1707,7 @@ def esop_delete_lot(esop_id):
     return redirect(url_for('esops'))
 
 
-# ---------------------------------------------------------------- Mutual Funds
+# ---------------------------------------------------------------- mutual funds
 def _mutual_fund_form_values(form):
     fund_house = clean_text(form.get('fund_house'), 120, True)
     fund_name = clean_text(form.get('fund_name'), 160, True)
@@ -1624,8 +1725,10 @@ def _mutual_fund_form_values(form):
     currency = form.get('currency', '').upper()
     if currency not in CURRENCIES:
         raise ValueError('Invalid currency.')
-    return (fund_house, fund_name, fund_category, invested_amount, current_value,
-            investment_mode, investment_date, currency)
+    return (
+        fund_house, fund_name, fund_category, invested_amount,
+        current_value, investment_mode, investment_date, currency,
+    )
 
 
 @app.route('/mutual-funds')
@@ -1635,12 +1738,9 @@ def mutual_funds():
         'SELECT * FROM mutual_funds WHERE user_id=? ORDER BY fund_house,fund_name,investment_date',
         (session['uid'],),
     ).fetchall()
-    display_rows = []
-    for index, row in enumerate(rows, start=1):
-        item = dict(row)
-        item['display_id'] = index
-        display_rows.append(item)
-    return render_template('mutual_funds.html', rows=display_rows)
+    return render_template('mutual_funds.html', rows=[
+        {**dict(row), 'display_id': i + 1} for i, row in enumerate(rows)
+    ])
 
 
 @app.route('/mutual-funds/new', methods=['GET', 'POST'])
@@ -1669,7 +1769,9 @@ def mutual_fund_new():
 @login_required
 def mutual_fund_edit(fund_id):
     db = get_db()
-    row = db.execute('SELECT * FROM mutual_funds WHERE id=? AND user_id=?', (fund_id, session['uid'])).fetchone()
+    row = db.execute(
+        'SELECT * FROM mutual_funds WHERE id=? AND user_id=?', (fund_id, session['uid']),
+    ).fetchone()
     if not row:
         abort(404)
     if request.method == 'POST':
@@ -1694,7 +1796,9 @@ def mutual_fund_edit(fund_id):
 @app.post('/mutual-funds/<int:fund_id>/delete')
 @login_required
 def mutual_fund_delete(fund_id):
-    cursor = get_db().execute('DELETE FROM mutual_funds WHERE id=? AND user_id=?', (fund_id, session['uid']))
+    cursor = get_db().execute(
+        'DELETE FROM mutual_funds WHERE id=? AND user_id=?', (fund_id, session['uid']),
+    )
     if not cursor.rowcount:
         abort(404)
     get_db().commit()
@@ -1703,15 +1807,13 @@ def mutual_fund_delete(fund_id):
     return redirect(url_for('mutual_funds'))
 
 
-# ---------------------------------------------------------------- Metals
+# ---------------------------------------------------------------- metals
 def _metal_form_values(form):
-    metal_types = ('Gold', 'Silver', 'Platinum', 'Palladium', 'Other')
-    product_forms = ('Coin', 'Bar', 'Round', 'ETF', 'Digital Gold', 'Jewellery', 'Other')
     metal_type = form.get('metal_type', '')
     product_form = form.get('product_form', '')
-    if metal_type not in metal_types:
+    if metal_type not in METAL_TYPES:
         raise ValueError('Select a valid Type of Metal.')
-    if product_form not in product_forms:
+    if product_form not in METAL_PRODUCT_FORMS:
         raise ValueError('Select a valid Form / Product.')
     weight = clean_number(form.get('weight'))
     if Decimal(weight) <= 0:
@@ -1728,8 +1830,10 @@ def _metal_form_values(form):
     currency = form.get('currency', '').upper()
     if currency not in CURRENCIES:
         raise ValueError('Invalid currency.')
-    return (metal_type, product_form, weight, weight_unit, purity, mint_brand,
-            investment_amount, current_value, currency)
+    return (
+        metal_type, product_form, weight, weight_unit, purity,
+        mint_brand, investment_amount, current_value, currency,
+    )
 
 
 @app.route('/metals')
@@ -1739,29 +1843,26 @@ def metals():
         'SELECT * FROM metals WHERE user_id=? ORDER BY metal_type,product_form,mint_brand',
         (session['uid'],),
     ).fetchall()
-    display_rows = []
-    for index, row in enumerate(rows, start=1):
-        item = dict(row)
-        item['display_id'] = index
-        display_rows.append(item)
-    return render_template('metals.html', rows=display_rows)
+    return render_template('metals.html', rows=[
+        {**dict(row), 'display_id': i + 1} for i, row in enumerate(rows)
+    ])
 
 
 @app.route('/metals/new', methods=['GET', 'POST'])
 @login_required
 def metal_new():
-    metal_types = ('Gold', 'Silver', 'Platinum', 'Palladium', 'Other')
-    product_forms = ('Coin', 'Bar', 'Round', 'ETF', 'Digital Gold', 'Jewellery', 'Other')
     if request.method == 'POST':
         try:
             values = _metal_form_values(request.form)
         except ValueError as exc:
             flash(str(exc), 'error')
-            return render_template('metal_edit.html', metal=request.form, currencies=CURRENCIES,
-                                   metal_types=metal_types, product_forms=product_forms)
+            return render_template(
+                'metal_edit.html', metal=request.form, currencies=CURRENCIES,
+                metal_types=METAL_TYPES, product_forms=METAL_PRODUCT_FORMS,
+            )
         cursor = get_db().execute(
-            '''INSERT INTO metals(user_id,metal_type,product_form,weight,weight_unit,purity,mint_brand,
-               investment_amount,current_value,currency,created_at,updated_at)
+            '''INSERT INTO metals(user_id,metal_type,product_form,weight,weight_unit,purity,
+               mint_brand,investment_amount,current_value,currency,created_at,updated_at)
                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''',
             (session['uid'], *values, now(), now()),
         )
@@ -1769,29 +1870,34 @@ def metal_new():
         audit('METAL_CREATE', cursor.lastrowid)
         flash('Metal investment saved.', 'success')
         return redirect(url_for('metals'))
-    return render_template('metal_edit.html', metal={}, currencies=CURRENCIES,
-                           metal_types=metal_types, product_forms=product_forms)
+    return render_template(
+        'metal_edit.html', metal={}, currencies=CURRENCIES,
+        metal_types=METAL_TYPES, product_forms=METAL_PRODUCT_FORMS,
+    )
 
 
 @app.route('/metals/<int:metal_id>/edit', methods=['GET', 'POST'])
 @login_required
 def metal_edit(metal_id):
     db = get_db()
-    row = db.execute('SELECT * FROM metals WHERE id=? AND user_id=?', (metal_id, session['uid'])).fetchone()
+    row = db.execute(
+        'SELECT * FROM metals WHERE id=? AND user_id=?', (metal_id, session['uid']),
+    ).fetchone()
     if not row:
         abort(404)
-    metal_types = ('Gold', 'Silver', 'Platinum', 'Palladium', 'Other')
-    product_forms = ('Coin', 'Bar', 'Round', 'ETF', 'Digital Gold', 'Jewellery', 'Other')
     if request.method == 'POST':
         try:
             values = _metal_form_values(request.form)
         except ValueError as exc:
             flash(str(exc), 'error')
-            return render_template('metal_edit.html', metal=request.form, metal_id=metal_id,
-                                   currencies=CURRENCIES, metal_types=metal_types, product_forms=product_forms)
+            return render_template(
+                'metal_edit.html', metal=request.form, metal_id=metal_id,
+                currencies=CURRENCIES, metal_types=METAL_TYPES,
+                product_forms=METAL_PRODUCT_FORMS,
+            )
         db.execute(
-            '''UPDATE metals SET metal_type=?,product_form=?,weight=?,weight_unit=?,purity=?,mint_brand=?,
-               investment_amount=?,current_value=?,currency=?,updated_at=?
+            '''UPDATE metals SET metal_type=?,product_form=?,weight=?,weight_unit=?,purity=?,
+               mint_brand=?,investment_amount=?,current_value=?,currency=?,updated_at=?
                WHERE id=? AND user_id=?''',
             (*values, now(), metal_id, session['uid']),
         )
@@ -1799,14 +1905,19 @@ def metal_edit(metal_id):
         audit('METAL_UPDATE', metal_id)
         flash('Metal investment updated.', 'success')
         return redirect(url_for('metals'))
-    return render_template('metal_edit.html', metal=row, metal_id=metal_id,
-                           currencies=CURRENCIES, metal_types=metal_types, product_forms=product_forms)
+    return render_template(
+        'metal_edit.html', metal=row, metal_id=metal_id,
+        currencies=CURRENCIES, metal_types=METAL_TYPES,
+        product_forms=METAL_PRODUCT_FORMS,
+    )
 
 
 @app.post('/metals/<int:metal_id>/delete')
 @login_required
 def metal_delete(metal_id):
-    cursor = get_db().execute('DELETE FROM metals WHERE id=? AND user_id=?', (metal_id, session['uid']))
+    cursor = get_db().execute(
+        'DELETE FROM metals WHERE id=? AND user_id=?', (metal_id, session['uid']),
+    )
     if not cursor.rowcount:
         abort(404)
     get_db().commit()
@@ -1815,13 +1926,7 @@ def metal_delete(metal_id):
     return redirect(url_for('metals'))
 
 
-# ---------------------------------------------------------------- Liabilities
-LIABILITY_TYPES = ('Personal Loan', 'Home Loan', 'Auto Loan', 'Other')
-LIABILITY_STATUSES = ('Active', 'Paid Off', 'In Dispute', 'Deferred')
-PAYMENT_FREQUENCIES = ('Monthly', 'Quarterly', 'Bi-weekly', 'Weekly', 'Semi-annual', 'Annual', 'On Demand')
-PAYMENT_METHODS = ('Auto-pay', 'ACH Transfer', 'Wire', 'Check', 'Cash', 'Standing Instruction', 'Other')
-
-
+# ---------------------------------------------------------------- liabilities
 def _liability_form_values(form, include_account=True):
     lender_name = clean_text(form.get('lender_name'), 160, True)
     liability_type = form.get('liability_type', '')
@@ -1830,6 +1935,7 @@ def _liability_form_values(form, include_account=True):
         raise ValueError('Select a valid Liability Type.')
     if status not in LIABILITY_STATUSES:
         raise ValueError('Select a valid liability Status.')
+
     original_principal = clean_number(form.get('original_principal'))
     if Decimal(original_principal) <= 0:
         raise ValueError('Original Principal Amount must be greater than zero.')
@@ -1837,65 +1943,46 @@ def _liability_form_values(form, include_account=True):
     currency = form.get('currency', '').upper()
     if currency not in CURRENCIES:
         raise ValueError('Invalid currency.')
+
     origination_date = clean_date(form.get('origination_date'))
     maturity_date = clean_date(form.get('maturity_date'))
     if not origination_date or not maturity_date:
         raise ValueError('Origination and Maturity dates are required.')
     if maturity_date < origination_date:
         raise ValueError('Maturity / End Date cannot be before Origination Date.')
+
     interest_rate = clean_number(form.get('interest_rate'))
     rate_type = form.get('rate_type', '')
     if rate_type not in {'FIXED', 'VARIABLE'}:
         raise ValueError('Select Fixed or Variable interest.')
+
     payment_frequency = form.get('payment_frequency', '')
     payment_method = form.get('payment_method', '')
     if payment_frequency not in PAYMENT_FREQUENCIES:
         raise ValueError('Select a valid Payment Frequency.')
     if payment_method not in PAYMENT_METHODS:
         raise ValueError('Select a valid Payment Method.')
+
     regular_payment = clean_number(form.get('regular_payment'))
     emi_date = clean_date(form.get('emi_date'))
     if not emi_date:
         raise ValueError('EMI Date is required.')
+
     notes = clean_text(form.get('notes'), 1000)
 
     if include_account:
         account_number = clean_text(form.get('account_number'), 100, True)
         return (
-            lender_name,
-            cipher.encrypt(account_number.encode()),
-            liability_type,
-            status,
-            original_principal,
-            current_balance,
-            currency,
-            origination_date,
-            maturity_date,
-            interest_rate,
-            rate_type,
-            payment_frequency,
-            regular_payment,
-            payment_method,
-            emi_date,
-            notes,
+            lender_name, cipher.encrypt(account_number.encode()), liability_type,
+            status, original_principal, current_balance, currency,
+            origination_date, maturity_date, interest_rate, rate_type,
+            payment_frequency, regular_payment, payment_method, emi_date, notes,
         )
 
     return (
-        lender_name,
-        liability_type,
-        status,
-        original_principal,
-        current_balance,
-        currency,
-        origination_date,
-        maturity_date,
-        interest_rate,
-        rate_type,
-        payment_frequency,
-        regular_payment,
-        payment_method,
-        emi_date,
-        notes,
+        lender_name, liability_type, status, original_principal, current_balance,
+        currency, origination_date, maturity_date, interest_rate, rate_type,
+        payment_frequency, regular_payment, payment_method, emi_date, notes,
     )
 
 
@@ -1906,12 +1993,9 @@ def liabilities():
         'SELECT * FROM liabilities WHERE user_id=? ORDER BY status,lender_name,maturity_date',
         (session['uid'],),
     ).fetchall()
-    display_rows = []
-    for index, row in enumerate(rows, start=1):
-        item = dict(row)
-        item['display_id'] = index
-        display_rows.append(item)
-    return render_template('liabilities.html', rows=display_rows)
+    return render_template('liabilities.html', rows=[
+        {**dict(row), 'display_id': i + 1} for i, row in enumerate(rows)
+    ])
 
 
 @app.route('/liabilities/new', methods=['GET', 'POST'])
@@ -1922,30 +2006,37 @@ def liability_new():
             values = _liability_form_values(request.form, include_account=True)
         except ValueError as exc:
             flash(str(exc), 'error')
-            return render_template('liability_edit.html', liability=request.form, currencies=CURRENCIES,
-                                   liability_types=LIABILITY_TYPES, statuses=LIABILITY_STATUSES,
-                                   payment_frequencies=PAYMENT_FREQUENCIES, payment_methods=PAYMENT_METHODS)
+            return render_template(
+                'liability_edit.html', liability=request.form, currencies=CURRENCIES,
+                liability_types=LIABILITY_TYPES, statuses=LIABILITY_STATUSES,
+                payment_frequencies=PAYMENT_FREQUENCIES, payment_methods=PAYMENT_METHODS,
+            )
         cursor = get_db().execute(
             '''INSERT INTO liabilities(user_id,lender_name,account_number,liability_type,status,
-               original_principal,current_balance,currency,origination_date,maturity_date,interest_rate,
-               rate_type,payment_frequency,regular_payment,payment_method,emi_date,notes,created_at,updated_at)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+               original_principal,current_balance,currency,origination_date,maturity_date,
+               interest_rate,rate_type,payment_frequency,regular_payment,payment_method,
+               emi_date,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
             (session['uid'], *values, now(), now()),
         )
         get_db().commit()
         audit('LIABILITY_CREATE', cursor.lastrowid)
         flash('Liability saved.', 'success')
         return redirect(url_for('liabilities'))
-    return render_template('liability_edit.html', liability={}, currencies=CURRENCIES,
-                           liability_types=LIABILITY_TYPES, statuses=LIABILITY_STATUSES,
-                           payment_frequencies=PAYMENT_FREQUENCIES, payment_methods=PAYMENT_METHODS)
+    return render_template(
+        'liability_edit.html', liability={}, currencies=CURRENCIES,
+        liability_types=LIABILITY_TYPES, statuses=LIABILITY_STATUSES,
+        payment_frequencies=PAYMENT_FREQUENCIES, payment_methods=PAYMENT_METHODS,
+    )
 
 
 @app.route('/liabilities/<int:liability_id>/edit', methods=['GET', 'POST'])
 @login_required
 def liability_edit(liability_id):
     db = get_db()
-    row = db.execute('SELECT * FROM liabilities WHERE id=? AND user_id=?', (liability_id, session['uid'])).fetchone()
+    row = db.execute(
+        'SELECT * FROM liabilities WHERE id=? AND user_id=?',
+        (liability_id, session['uid']),
+    ).fetchone()
     if not row:
         abort(404)
     if request.method == 'POST':
@@ -1953,31 +2044,38 @@ def liability_edit(liability_id):
             values = _liability_form_values(request.form, include_account=False)
         except ValueError as exc:
             flash(str(exc), 'error')
-            return render_template('liability_edit.html', liability=request.form, liability_id=liability_id,
-                                   currencies=CURRENCIES, liability_types=LIABILITY_TYPES,
-                                   statuses=LIABILITY_STATUSES, payment_frequencies=PAYMENT_FREQUENCIES,
-                                   payment_methods=PAYMENT_METHODS)
+            return render_template(
+                'liability_edit.html', liability=request.form, liability_id=liability_id,
+                currencies=CURRENCIES, liability_types=LIABILITY_TYPES,
+                statuses=LIABILITY_STATUSES, payment_frequencies=PAYMENT_FREQUENCIES,
+                payment_methods=PAYMENT_METHODS,
+            )
         db.execute(
             '''UPDATE liabilities SET lender_name=?,liability_type=?,status=?,original_principal=?,
-               current_balance=?,currency=?,origination_date=?,maturity_date=?,interest_rate=?,rate_type=?,
-               payment_frequency=?,regular_payment=?,payment_method=?,emi_date=?,notes=?,updated_at=?
-               WHERE id=? AND user_id=?''',
+               current_balance=?,currency=?,origination_date=?,maturity_date=?,interest_rate=?,
+               rate_type=?,payment_frequency=?,regular_payment=?,payment_method=?,emi_date=?,
+               notes=?,updated_at=? WHERE id=? AND user_id=?''',
             (*values, now(), liability_id, session['uid']),
         )
         db.commit()
         audit('LIABILITY_UPDATE', liability_id)
         flash('Liability updated.', 'success')
         return redirect(url_for('liabilities'))
-    return render_template('liability_edit.html', liability=row, liability_id=liability_id,
-                           currencies=CURRENCIES, liability_types=LIABILITY_TYPES,
-                           statuses=LIABILITY_STATUSES, payment_frequencies=PAYMENT_FREQUENCIES,
-                           payment_methods=PAYMENT_METHODS)
+    return render_template(
+        'liability_edit.html', liability=row, liability_id=liability_id,
+        currencies=CURRENCIES, liability_types=LIABILITY_TYPES,
+        statuses=LIABILITY_STATUSES, payment_frequencies=PAYMENT_FREQUENCIES,
+        payment_methods=PAYMENT_METHODS,
+    )
 
 
 @app.post('/liabilities/<int:liability_id>/delete')
 @login_required
 def liability_delete(liability_id):
-    cursor = get_db().execute('DELETE FROM liabilities WHERE id=? AND user_id=?', (liability_id, session['uid']))
+    cursor = get_db().execute(
+        'DELETE FROM liabilities WHERE id=? AND user_id=?',
+        (liability_id, session['uid']),
+    )
     if not cursor.rowcount:
         abort(404)
     get_db().commit()
@@ -1986,10 +2084,7 @@ def liability_delete(liability_id):
     return redirect(url_for('liabilities'))
 
 
-# ---------------------------------------------------------------- Retirals
-RETIRAL_FUND_TYPES = ('EPF', 'PPF', 'NPS', 'Superannuation', 'Pension Fund', 'Gratuity', '401(k)', 'Other')
-
-
+# ---------------------------------------------------------------- retirals
 def _retiral_form_values(form):
     fund_type = form.get('fund_type', '')
     if fund_type not in RETIRAL_FUND_TYPES:
@@ -2010,12 +2105,9 @@ def retirals():
         'SELECT * FROM retirals WHERE user_id=? ORDER BY fund_type,id',
         (session['uid'],),
     ).fetchall()
-    display_rows = []
-    for index, row in enumerate(rows, start=1):
-        item = dict(row)
-        item['display_id'] = index
-        display_rows.append(item)
-    return render_template('retirals.html', rows=display_rows)
+    return render_template('retirals.html', rows=[
+        {**dict(row), 'display_id': i + 1} for i, row in enumerate(rows)
+    ])
 
 
 @app.route('/retirals/new', methods=['GET', 'POST'])
@@ -2026,25 +2118,33 @@ def retiral_new():
             values = _retiral_form_values(request.form)
         except ValueError as exc:
             flash(str(exc), 'error')
-            return render_template('retiral_edit.html', retiral=request.form,
-                                   fund_types=RETIRAL_FUND_TYPES, currencies=CURRENCIES)
+            return render_template(
+                'retiral_edit.html', retiral=request.form,
+                fund_types=RETIRAL_FUND_TYPES, currencies=CURRENCIES,
+            )
         cursor = get_db().execute(
-            'INSERT INTO retirals(user_id,fund_type,amount_invested,current_value,currency,notes,created_at,updated_at) '
-            'VALUES(?,?,?,?,?,?,?,?)',
+            'INSERT INTO retirals(user_id,fund_type,amount_invested,current_value,currency,'
+            'notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)',
             (session['uid'], *values, now(), now()),
         )
         get_db().commit()
         audit('RETIRAL_CREATE', cursor.lastrowid)
         flash('Retiral fund saved.', 'success')
         return redirect(url_for('retirals'))
-    return render_template('retiral_edit.html', retiral={}, fund_types=RETIRAL_FUND_TYPES, currencies=CURRENCIES)
+    return render_template(
+        'retiral_edit.html', retiral={},
+        fund_types=RETIRAL_FUND_TYPES, currencies=CURRENCIES,
+    )
 
 
 @app.route('/retirals/<int:retiral_id>/edit', methods=['GET', 'POST'])
 @login_required
 def retiral_edit(retiral_id):
     db = get_db()
-    row = db.execute('SELECT * FROM retirals WHERE id=? AND user_id=?', (retiral_id, session['uid'])).fetchone()
+    row = db.execute(
+        'SELECT * FROM retirals WHERE id=? AND user_id=?',
+        (retiral_id, session['uid']),
+    ).fetchone()
     if not row:
         abort(404)
     if request.method == 'POST':
@@ -2052,25 +2152,32 @@ def retiral_edit(retiral_id):
             values = _retiral_form_values(request.form)
         except ValueError as exc:
             flash(str(exc), 'error')
-            return render_template('retiral_edit.html', retiral=request.form, retiral_id=retiral_id,
-                                   fund_types=RETIRAL_FUND_TYPES, currencies=CURRENCIES)
+            return render_template(
+                'retiral_edit.html', retiral=request.form, retiral_id=retiral_id,
+                fund_types=RETIRAL_FUND_TYPES, currencies=CURRENCIES,
+            )
         db.execute(
-            'UPDATE retirals SET fund_type=?,amount_invested=?,current_value=?,currency=?,notes=?,updated_at=? '
-            'WHERE id=? AND user_id=?',
+            'UPDATE retirals SET fund_type=?,amount_invested=?,current_value=?,currency=?,'
+            'notes=?,updated_at=? WHERE id=? AND user_id=?',
             (*values, now(), retiral_id, session['uid']),
         )
         db.commit()
         audit('RETIRAL_UPDATE', retiral_id)
         flash('Retiral fund updated.', 'success')
         return redirect(url_for('retirals'))
-    return render_template('retiral_edit.html', retiral=row, retiral_id=retiral_id,
-                           fund_types=RETIRAL_FUND_TYPES, currencies=CURRENCIES)
+    return render_template(
+        'retiral_edit.html', retiral=row, retiral_id=retiral_id,
+        fund_types=RETIRAL_FUND_TYPES, currencies=CURRENCIES,
+    )
 
 
 @app.post('/retirals/<int:retiral_id>/delete')
 @login_required
 def retiral_delete(retiral_id):
-    cursor = get_db().execute('DELETE FROM retirals WHERE id=? AND user_id=?', (retiral_id, session['uid']))
+    cursor = get_db().execute(
+        'DELETE FROM retirals WHERE id=? AND user_id=?',
+        (retiral_id, session['uid']),
+    )
     if not cursor.rowcount:
         abort(404)
     get_db().commit()
@@ -2079,7 +2186,189 @@ def retiral_delete(retiral_id):
     return redirect(url_for('retirals'))
 
 
-# ---------------------------------------------------------------- Errors & CLI
+# ---------------------------------------------------------------- budgets
+def _budget_form_values(form):
+    category = clean_text(form.get('category'), 100, True)
+    monthly_limit = clean_number(form.get('monthly_limit'))
+    if Decimal(monthly_limit) <= 0:
+        raise ValueError('Monthly limit must be greater than zero.')
+    currency = form.get('currency', '').upper()
+    if currency not in CURRENCIES:
+        raise ValueError('Invalid currency.')
+    notes = clean_text(form.get('notes'), 500)
+    return (category, monthly_limit, currency, notes)
+
+
+def _budget_summary_for_month(db, uid, month):
+    """
+    Return (rows, summary) for the given month:
+      rows    — one dict per budget with limit, spent, remaining, percent
+      summary — per-currency totals for the summary card
+    """
+    budget_rows = db.execute(
+        'SELECT * FROM budgets WHERE user_id=? ORDER BY currency, category',
+        (uid,),
+    ).fetchall()
+
+    spend_rows = db.execute(
+        '''
+        SELECT category, currency, SUM(CAST(amount AS REAL)) AS spent
+        FROM transactions
+        WHERE user_id=? AND transaction_type='EXPENSE' AND substr(transaction_date,1,7)=?
+        GROUP BY category, currency
+        ''',
+        (uid, month),
+    ).fetchall()
+    spend_map = {
+        (r['category'].strip().lower(), r['currency']): float(r['spent'] or 0)
+        for r in spend_rows
+    }
+
+    rows = []
+    for row in budget_rows:
+        item = dict(row)
+        limit = float(row['monthly_limit'] or 0)
+        spent = spend_map.get((row['category'].strip().lower(), row['currency']), 0.0)
+        item['limit'] = limit
+        item['spent'] = spent
+        item['remaining'] = limit - spent
+        item['percent'] = (spent / limit * 100) if limit else 0
+        item['over'] = spent > limit
+        rows.append(item)
+
+    summary = {}
+    for row in rows:
+        code = row['currency']
+        if code not in summary:
+            summary[code] = {'limit': 0.0, 'spent': 0.0, 'over_count': 0, 'count': 0}
+        summary[code]['limit'] += row['limit']
+        summary[code]['spent'] += row['spent']
+        summary[code]['count'] += 1
+        if row['over']:
+            summary[code]['over_count'] += 1
+
+    return rows, summary
+
+
+def _used_categories(db, uid):
+    return [
+        r['category'] for r in db.execute(
+            'SELECT DISTINCT category FROM transactions WHERE user_id=? ORDER BY category',
+            (uid,),
+        ).fetchall()
+    ]
+
+
+@app.route('/budgets')
+@login_required
+def budgets():
+    db = get_db()
+    uid = session['uid']
+
+    today = datetime.now(timezone.utc).date()
+    default_month = f'{today.year}-{today.month:02d}'
+    selected_month = request.args.get('month', default_month)
+    if not re.fullmatch(r'\d{4}-\d{2}', selected_month):
+        selected_month = default_month
+
+    rows, summary = _budget_summary_for_month(db, uid, selected_month)
+
+    year, month = map(int, selected_month.split('-'))
+    first = today.replace(year=year, month=month, day=1)
+    prev_month = (first - timedelta(days=1)).strftime('%Y-%m')
+    next_month = f'{year + 1}-01' if month == 12 else f'{year}-{month + 1:02d}'
+
+    return render_template(
+        'budgets.html',
+        rows=rows,
+        summary=summary,
+        selected_month=selected_month,
+        prev_month=prev_month,
+        next_month=next_month,
+        used_categories=_used_categories(db, uid),
+    )
+
+
+@app.route('/budgets/new', methods=['GET', 'POST'])
+@login_required
+def budget_new():
+    db = get_db()
+    if request.method == 'POST':
+        try:
+            values = _budget_form_values(request.form)
+        except ValueError as exc:
+            flash(str(exc), 'error')
+            return render_template(
+                'budget_edit.html', budget=request.form,
+                currencies=CURRENCIES, used_categories=[],
+            )
+        cursor = db.execute(
+            'INSERT INTO budgets(user_id,category,monthly_limit,currency,notes,created_at,updated_at) '
+            'VALUES(?,?,?,?,?,?,?)',
+            (session['uid'], *values, now(), now()),
+        )
+        db.commit()
+        audit('BUDGET_CREATE', cursor.lastrowid)
+        flash('Budget saved.', 'success')
+        return redirect(url_for('budgets'))
+    return render_template(
+        'budget_edit.html', budget={}, currencies=CURRENCIES,
+        used_categories=_used_categories(db, session['uid']),
+    )
+
+
+@app.route('/budgets/<int:budget_id>/edit', methods=['GET', 'POST'])
+@login_required
+def budget_edit(budget_id):
+    db = get_db()
+    row = db.execute(
+        'SELECT * FROM budgets WHERE id=? AND user_id=?',
+        (budget_id, session['uid']),
+    ).fetchone()
+    if not row:
+        abort(404)
+
+    if request.method == 'POST':
+        try:
+            values = _budget_form_values(request.form)
+        except ValueError as exc:
+            flash(str(exc), 'error')
+            return render_template(
+                'budget_edit.html', budget=request.form, budget_id=budget_id,
+                currencies=CURRENCIES, used_categories=[],
+            )
+        db.execute(
+            'UPDATE budgets SET category=?,monthly_limit=?,currency=?,notes=?,updated_at=? '
+            'WHERE id=? AND user_id=?',
+            (*values, now(), budget_id, session['uid']),
+        )
+        db.commit()
+        audit('BUDGET_UPDATE', budget_id)
+        flash('Budget updated.', 'success')
+        return redirect(url_for('budgets'))
+
+    return render_template(
+        'budget_edit.html', budget=row, budget_id=budget_id,
+        currencies=CURRENCIES, used_categories=_used_categories(db, session['uid']),
+    )
+
+
+@app.post('/budgets/<int:budget_id>/delete')
+@login_required
+def budget_delete(budget_id):
+    cursor = get_db().execute(
+        'DELETE FROM budgets WHERE id=? AND user_id=?',
+        (budget_id, session['uid']),
+    )
+    if not cursor.rowcount:
+        abort(404)
+    get_db().commit()
+    audit('BUDGET_DELETE', budget_id)
+    flash('Budget deleted.', 'success')
+    return redirect(url_for('budgets'))
+
+
+# ---------------------------------------------------------------- errors & CLI
 @app.errorhandler(400)
 @app.errorhandler(404)
 @app.errorhandler(413)

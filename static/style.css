@@ -2,13 +2,16 @@
    SECURE FINANCE — Refined Dark Theme
    Complete stylesheet
 
-   Table sizing (updated):
-     th  → 10px uppercase
-     td  → 12.5px
-     padding → 12px 16px
-     .data-panel--compact → 12px / 10px 13px (denser variant)
+   Includes:
+     • Refined dark fintech palette and surfaces
+     • Compact data tables (th 10px, td 12.5px)
+     • KPI cards with cyan/green/pink/gold accents
+     • Hardened KPI grid (no overflow on long numbers)
+     • Dashboard budget panel
+     • Responsive layout down to 480px
    ========================================================= */
 
+/* ---------- Design tokens ---------- */
 :root {
   /* Base surfaces */
   --bg: #16171f;
@@ -371,6 +374,10 @@ main {
 }
 
 footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   padding: 8px 32px 24px;
   color: var(--muted-2);
   font-size: 12px;
@@ -509,14 +516,16 @@ button:active {
 }
 
 /* =========================
-   KPI cards
+   KPI cards — hardened grid
    ========================= */
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 18px;
   margin-bottom: 28px;
+  align-items: stretch;
+  grid-auto-rows: minmax(150px, auto);
 }
 
 .kpi-card {
@@ -525,6 +534,18 @@ button:active {
   position: relative;
   overflow: hidden;
   border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Prevent long numbers or text from overflowing the card boundary */
+.kpi-card > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .kpi-card::after {
@@ -561,7 +582,6 @@ button:active {
   font-size: 28px;
   font-weight: 700;
   color: var(--cyan-bright);
-  margin: 10px 0 6px;
   letter-spacing: -0.02em;
   line-height: 1.1;
 }
@@ -937,7 +957,7 @@ details[open] summary {
 }
 
 /* =========================
-   Data tables  (compact typography)
+   Data tables — compact typography
    ========================= */
 
 .data-panel {
@@ -951,31 +971,21 @@ details[open] summary {
 
 table {
   width: 100%;
-  min-width: 780px; /* keep as-is for the scroll fallback */
-  table-layout: auto; /* default; content decides widths */
-}
-
-/* Or, to force equal columns: */
-table.equal-cols {
-  table-layout: fixed;
-}
-
-table.equal-cols th,
-table.equal-cols td {
-  width: auto; /* browser distributes evenly */
+  border-collapse: collapse;
+  min-width: 780px;
 }
 
 th,
 td {
   text-align: left;
-  padding: 12px 16px; /* was 15px 18px */
+  padding: 12px 16px;
   border-bottom: 1px solid var(--line-soft);
 }
 
 th {
   background: rgba(0, 0, 0, 0.18);
   color: var(--muted);
-  font-size: 9px; /* was 10px */
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.12em;
@@ -1000,7 +1010,7 @@ tbody tr:last-child td {
 
 td {
   color: var(--text-soft);
-  font-size: 11px; /* was 10px */
+  font-size: 12.5px;
   line-height: 1.4;
 }
 
@@ -1387,6 +1397,143 @@ table tbody td a:hover {
 }
 
 /* =========================
+   Dashboard budget panel
+   ========================= */
+
+.budget-panel {
+  margin-bottom: 28px;
+  padding: 22px 24px 24px;
+  border-radius: var(--radius-lg);
+}
+
+.budget-panel-heading {
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line-soft);
+  align-items: center;
+}
+
+.budget-panel-heading h2 {
+  margin: 3px 0 0;
+  font-size: 18px;
+}
+
+.budget-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.budget-panel-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.budget-panel-row-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+}
+
+.budget-panel-currency {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+
+.budget-panel-amount {
+  display: block;
+  font-size: clamp(20px, 2.2vw, 26px);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: #fff;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.budget-panel-limit {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.budget-panel-meta {
+  text-align: right;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.budget-panel-meta strong {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.budget-panel-meta strong.positive {
+  color: var(--green);
+}
+.budget-panel-meta strong.negative {
+  color: var(--pink);
+}
+
+.budget-panel-meta small {
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.budget-panel-over {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(229, 107, 138, 0.35);
+  background: rgba(229, 107, 138, 0.12);
+  color: #ff92aa !important;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.budget-panel-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.budget-panel-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--cyan), var(--cyan-bright));
+  transition: width 0.5s var(--ease);
+}
+
+.budget-panel-progress-fill.warning {
+  background: linear-gradient(90deg, #a88a4a, var(--gold));
+}
+
+.budget-panel-progress-fill.over {
+  background: linear-gradient(90deg, #a84e66, var(--pink));
+}
+
+/* =========================
    Summary total sizing
    ========================= */
 
@@ -1397,6 +1544,35 @@ table tbody td a:hover {
   font-size: clamp(22px, 2.4vw, 28px) !important;
   color: var(--cyan-bright);
   letter-spacing: -0.02em;
+}
+
+/* =========================
+   Footer heart (optional)
+   ========================= */
+
+.heart-white {
+  color: #ffffff;
+  font-size: 1em;
+  line-height: 1;
+  display: inline-block;
+  vertical-align: -1px;
+}
+
+.heart-white--glow {
+  text-shadow:
+    0 0 6px rgba(255, 255, 255, 0.65),
+    0 0 14px rgba(110, 207, 227, 0.35);
+  animation: heartPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes heartPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
 }
 
 /* =========================
@@ -1530,7 +1706,7 @@ table tbody td a:hover {
     font-size: 17px;
   }
 
-  /* Tables get slightly tighter still on phones */
+  /* Tables get slightly tighter on phones */
   th,
   td {
     padding: 10px 12px;
@@ -1541,6 +1717,30 @@ table tbody td a:hover {
   .money {
     font-size: 12px;
   }
+
+  .budget-panel {
+    padding: 18px 18px 20px;
+  }
+
+  .budget-panel-row-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .budget-panel-meta {
+    align-items: flex-start;
+    text-align: left;
+  }
+}
+
+@media (max-width: 480px) {
+  .summary-cards,
+  .portfolio-summary-grid,
+  .metal-summary-grid,
+  .liability-summary-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1549,6 +1749,10 @@ table tbody td a:hover {
   *::after {
     transition: none !important;
     animation: none !important;
+  }
+
+  .heart-white--glow {
+    animation: none;
   }
 }
 
@@ -1571,160 +1775,5 @@ table tbody td a:hover {
   }
   .app-shell {
     grid-template-columns: 260px minmax(0, 1fr);
-  }
-}
-
-/* =========================================================
-   Mutual Funds table — widen money columns, wrap fund name
-   ========================================================= */
-
-.mf-table {
-  table-layout: fixed;
-  width: 100%;
-  min-width: 900px; /* a bit wider than the default 780 */
-}
-
-/* Column widths (must add up to 100%) */
-.mf-table .mf-id {
-  width: 5%;
-}
-.mf-table .mf-house {
-  width: 14%;
-}
-.mf-table .mf-name {
-  width: 22%;
-} /* narrower than before */
-.mf-table .mf-type {
-  width: 9%;
-}
-.mf-table .mf-money {
-  width: 11%;
-} /* three of these = 33% */
-.mf-table .mf-pct {
-  width: 7%;
-}
-.mf-table .mf-actions {
-  width: 10%;
-}
-
-/* Fund name wraps onto two lines instead of widening the column */
-.mf-table .mf-name strong {
-  display: block;
-  white-space: normal;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  line-height: 1.3;
-}
-
-/* Fund house too, but allow it to be tidier */
-.mf-table .mf-house {
-  white-space: normal;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  line-height: 1.3;
-}
-
-/* Money columns: right-align, tabular figures, no wrapping */
-.mf-table .mf-money {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.mf-table .mf-pct {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* Actions column: stack buttons on narrow widths */
-.mf-table .mf-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-@media (max-width: 1100px) {
-  .mf-table .mf-house {
-    width: 12%;
-  }
-  .mf-table .mf-name {
-    width: 20%;
-  }
-  .mf-table .mf-money {
-    width: 12%;
-  }
-  .mf-table .mf-actions {
-    width: 12%;
-  }
-}
-
-@media (max-width: 900px) {
-  /* On smaller screens, hide the ID and Type columns
-     so the money columns keep their space */
-  .mf-table .mf-id,
-  .mf-table .mf-type {
-    display: none;
-  }
-
-  .mf-table .mf-house {
-    width: 22%;
-  }
-  .mf-table .mf-name {
-    width: 32%;
-  }
-  .mf-table .mf-money {
-    width: 15%;
-  }
-  .mf-table .mf-pct {
-    width: 10%;
-  }
-  .mf-table .mf-actions {
-    width: 21%;
-  }
-}
-
-/* ---------------- Footer ---------------- */
-
-footer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 32px 24px;
-  color: var(--muted-2);
-  font-size: 12px;
-  letter-spacing: 0.02em;
-}
-
-.heart-white {
-  color: #ffffff;
-  font-size: 1em;
-  line-height: 1;
-  display: inline-block;
-  vertical-align: -1px;
-}
-
-.heart-white--glow {
-  text-shadow:
-    0 0 6px rgba(255, 255, 255, 0.65),
-    0 0 14px rgba(110, 207, 227, 0.35);
-  animation: heartPulse 2.4s ease-in-out infinite;
-}
-
-@keyframes heartPulse {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.12);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .heart-white--glow {
-    animation: none;
   }
 }

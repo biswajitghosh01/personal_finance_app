@@ -12,7 +12,7 @@ endblock %} {% block page_heading %}Overview{% endblock %} {% block content %}
 </section>
 
 <section class="kpi-grid dashboard-kpis">
-  {% for currency,value in net.items() %}
+  {% for currency, value in net.items() %}
   <article class="panel kpi-card accent-cyan">
     <div class="kpi-label">Net Worth · {{ currency }}</div>
     <strong
@@ -20,9 +20,9 @@ endblock %} {% block page_heading %}Overview{% endblock %} {% block content %}
     >
     <small
       >Assets {{ currency_symbol(currency) }} {{
-      '{:,.2f}'.format(assets.get(currency,0)) }} · Liabilities {{
-      currency_symbol(currency) }} {{
-      '{:,.2f}'.format(liabilities.get(currency,0)) }}</small
+      '{:,.2f}'.format(assets.get(currency, 0)) }} · Liabilities {{
+      currency_symbol(currency) }} {{ '{:,.2f}'.format(liabilities.get(currency,
+      0)) }}</small
     >
   </article>
   {% else %}
@@ -31,8 +31,7 @@ endblock %} {% block page_heading %}Overview{% endblock %} {% block content %}
     <strong>0.00</strong>
     <small>Add financial records to populate the dashboard.</small>
   </article>
-  {% endfor %} {# Bank balances — separate from Net Worth #} {% for currency,
-  value in bank_balances.items() %}
+  {% endfor %} {% for currency, value in bank_balances.items() %}
   <article class="panel kpi-card accent-gold">
     <div class="kpi-label">Bank Balance · {{ currency }}</div>
     <strong
@@ -54,6 +53,65 @@ endblock %} {% block page_heading %}Overview{% endblock %} {% block content %}
     <small>Outstanding liability categories</small>
   </article>
 </section>
+
+{# ---------- Budget status — full-width panel on its own row ---------- #} {%
+if budget_summary %}
+<section class="panel budget-panel">
+  <div class="panel-heading budget-panel-heading">
+    <div>
+      <span class="eyebrow">BUDGET STATUS</span>
+      <h2>This month's spending against limits</h2>
+    </div>
+    <a class="button secondary" href="{{ url_for('budgets') }}"
+      >Manage budgets</a
+    >
+  </div>
+
+  <div class="budget-panel-body">
+    {% for code, total in budget_summary.items() %} {% set remaining =
+    total['limit'] - total['spent'] %} {% set pct = (total['spent'] /
+    total['limit'] * 100) if total['limit'] else 0 %} {% set bar_class = 'over'
+    if total['over_count'] else ('warning' if pct >= 80 else 'ok') %}
+    <div class="budget-panel-row">
+      <div class="budget-panel-row-head">
+        <div>
+          <span class="budget-panel-currency">{{ code }}</span>
+          <strong class="budget-panel-amount">
+            {{ currency_symbol(code) }} {{ '{:,.2f}'.format(total['spent']) }}
+          </strong>
+          <small class="budget-panel-limit">
+            of {{ currency_symbol(code) }} {{ '{:,.2f}'.format(total['limit'])
+            }} · {{ total['count'] }} {{ 'category' if total['count'] == 1 else
+            'categories' }}
+          </small>
+        </div>
+        <div class="budget-panel-meta">
+          <strong class="{{ 'negative' if remaining < 0 else 'positive' }}">
+            {{ '%.0f'|format(pct) }}%
+          </strong>
+          {% if total['over_count'] %}
+          <small class="budget-panel-over">
+            {{ total['over_count'] }} over
+          </small>
+          {% elif remaining >= 0 %}
+          <small
+            >Left: {{ currency_symbol(code) }} {{ '{:,.2f}'.format(remaining)
+            }}</small
+          >
+          {% endif %}
+        </div>
+      </div>
+      <div class="budget-panel-progress">
+        <div
+          class="budget-panel-progress-fill {{ bar_class }}"
+          style="width: {{ [pct, 100]|min }}%;"
+        ></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 
 <section class="dashboard-grid dashboard-primary-grid">
   <article class="panel chart-panel chart-primary">
