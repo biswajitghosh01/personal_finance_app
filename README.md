@@ -298,10 +298,18 @@ explicitly.
    | No        | TCP         | `80`             | HTTP        |
    | No        | TCP         | `443`            | HTTPS       |
 
-   Port 80 is required for Let's Encrypt HTTP-01 issuance and renewal. Port
-   443 serves the encrypted site.
+   **Important:** the port belongs in the **Destination Port Range** field,
+   not in the Source Port Range. Port 80 is required for Let's Encrypt
+   HTTP-01 issuance and renewal. Port 443 serves the encrypted site.
 
 4. Click **Add Ingress Rules**.
+
+> **Warning — Oracle's hidden iptables firewall.** Opening ports in the
+> Security List is **only half the job**. Oracle's Ubuntu images ship with a
+> default `iptables` rule that rejects all inbound traffic except SSH,
+> regardless of the Security List. If you skip Step 5.5 below, ports 80 and
+> 443 will be blocked at the operating-system level even though the Security
+> List shows them as open.
 
 ### Step 4 — Connect to the instance
 
@@ -318,19 +326,226 @@ The default user on an Ubuntu OCI image is `ubuntu`.
 
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y python3-venv python3-pip nginx git certbot python3-certbot-nginx ufw fail2ban
+sudo apt install -y python3-venv python3-pip nginx git certbot python3-certbot-nginx fail2ban
 ```
 
-This installs Python, Nginx, Certbot, UFW, and Fail2ban.
+This installs Python, Nginx, Certbot, and Fail2ban. **UFW is deliberately
+omitted** from this list — see Step 5.5 for why.
+
+### Step 5.5 — Fix Oracle's hidden iptables firewall
+
+This step is mandatory on Oracle Cloud. Without it, the Certbot HTTP-01
+challenge in Step 11 will fail with:
+
+```text
+Hint: The Certificate Authority failed to verify the temporary nginx
+configuration changes made by Certbot. Ensure the listed domains point to
+this nginx server and that it is accessible from the internet.
+Some challenges have failed.
+```
+
+#### 5.5.1 — Confirm the block is at the host firewall
+
+```bash
+sudo iptables -L INPUT -n --line-numbers
+```
+
+Look for a `REJECT` rule that appears **before** any rule allowing port 80:
+
+```
+5    REJECT     all  --  0.0.0.0/0            0.0.0.0/0            reject-with icmp-host-prohibited
+```
+
+If that `REJECT` line appears earlier in the list than any `ACCEPT` rule for
+port 80, ports 80 and 443 are being dropped at the OS level. This is what
+blocks both web traffic and the Let's Encrypt challenge.
+
+#### 5.5.2 — Insert accept rules above the reject
+
+```bash
+sudo iptables -I INPUT 5 -p tcp --dport 80 -m state --state NEW -j ACCEPT
+sudo iptables -I INPUT 6 -p tcp --dport 443 -m state --state NEW -j ACCEPT
+```
+
+The numbers `5` and `6` are rule positions. Adjust them so the two `ACCEPT`
+rules end up **above** the `REJECT`. Re-run
+`sudo iptables -L INPUT -n --line-numbers` to confirm the ordering:
+
+```
+1    ACCEPT     all  --  lo
+2    ACCEPT     all  --  0.0.0.0/0  state RELATED,ESTABLISHED
+3    ACCEPT     tcp  --  0.0.0.0/0  tcp dpt:22
+4    ACCEPT     icmp --  0.0.0.0/0
+5    ACCEPT     tcp  --  0.0.0.0/0  tcp dpt:80  state NEW   <-- added
+6    ACCEPT     tcp  --  0.0.0.0/0  tcp dpt:443 state NEW   <-- added
+7    REJECT     all  --  0.0.0.0/0  reject-with icmp-host-prohibited
+```
+
+#### 5.5.3 — Make the rules persistent across reboots
+
+By default, `iptables` rules are lost on reboot. Save them:
+
+```bash
+sudo apt install -y iptables-persistent
+sudo netfilter-persistent save
+```
+
+The install prompts twice — answer **Yes** to both prompts (save current IPv4
+rules and IPv6 rules).
+
+#### 5.5.4 — Optional: skip UFW entirely
+
+Oracle Cloud's Security List plus iptables is a complete two-layer firewall.
+Installing UFW adds a third layer that can conflict with the pre-existing
+iptables rules. The README deliberately does **not** install UFW, because:
+
+- The `REJECT` rule is inserted by Oracle's image, not by UFW.
+- Adding UFW rules does not remove the `REJECT`, so UFW appears to be
+  misconfigured when it is actually iptables doing the blocking.
+- Fewer moving parts mean fewer failure modes.
+
+If UFW is not installed and you run `sudo ufw status verbose`, you will see:
+
+```text
+sudo: ufw: command not found
+```
+
+That is expected and harmless. Skip straight to the iptables fix above.
+
+If you prefer UFW anyway, install it and then **verify iptables ordering
+afterwards**:
+
+```bash
+sudo apt install -y ufw
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow OpenSSH
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw --force enable
+
+# Then check that iptables ACCEPT rules for 80/443 come before any REJECT
+sudo iptables -L INPUT -n --line-numbers
+```
+
+If the `REJECT` still precedes UFW's rules, apply the manual iptables
+insertion from 5.5.2 on top.
 
 ### Step 6 — Clone the repository and set up the app
+
+Create the target directory and give the `ubuntu` user ownership:
 
 ```bash
 sudo mkdir -p /opt/finance
 sudo chown ubuntu:ubuntu /opt/finance
-git clone <YOUR_GITHUB_REPO_URL> /opt/finance/app
-cd /opt/finance/app
+```
 
+Then choose **one** of the two authentication methods below. GitHub
+permanently removed password authentication for Git operations in August
+2021, so the plain `git clone https://github.com/...` command will fail with
+`remote: Invalid username or token. Password authentication is not supported
+for Git operations.` unless you use a Personal Access Token or a Deploy Key.
+
+#### Method A — Personal Access Token (quickest)
+
+Generate a token on GitHub:
+
+1. Sign in at `https://github.com`.
+2. Go to **Settings → Developer settings → Personal access tokens →
+   Tokens (classic)**.
+3. Click **Generate new token (classic)**.
+4. Give it a name, e.g. `oracle-server-deploy`, and set an expiration
+   (90 days is a reasonable balance).
+5. Under **Scopes**, check **`repo`** (required for private repositories).
+6. Click **Generate token** and copy the value — it is shown only once.
+
+Clone using the token embedded in the URL:
+
+```bash
+git clone https://<GITHUB_USERNAME>:<YOUR_PAT>@github.com/biswajitghosh01/personal_finance_app.git /opt/finance/app
+```
+
+For example:
+
+```bash
+git clone https://biswajitghosh01:ghp_xxxxxxxxxxxxxxxxxxxx@github.com/biswajitghosh01/personal_finance_app.git /opt/finance/app
+```
+
+To avoid embedding the token in every future `git pull`, store it in
+`~/.netrc`:
+
+```bash
+cat > ~/.netrc <<'EOF'
+machine github.com
+login <GITHUB_USERNAME>
+password <YOUR_PAT>
+EOF
+chmod 600 ~/.netrc
+```
+
+Then clone normally:
+
+```bash
+git clone https://github.com/biswajitghosh01/personal_finance_app.git /opt/finance/app
+```
+
+#### Method B — SSH Deploy Key (recommended for production)
+
+A deploy key is scoped to a single repository and can be read-only, so a
+compromised server cannot modify your code.
+
+Generate the key pair on the server:
+
+```bash
+ssh-keygen -t ed25519 -C "oracle-finance-server" -f ~/.ssh/github_deploy_key -N ""
+```
+
+Print the public key and copy the whole line (it starts with `ssh-ed25519`):
+
+```bash
+cat ~/.ssh/github_deploy_key.pub
+```
+
+On GitHub, go to your repository:
+
+1. **Settings → Deploy keys → Add deploy key**.
+2. Give it a title, e.g. `oracle-server`.
+3. Paste the public key.
+4. Leave **Allow write access** unchecked.
+5. Click **Add key**.
+
+Configure SSH so Git uses this key for GitHub:
+
+```bash
+cat >> ~/.ssh/config <<'EOF'
+Host github.com
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/github_deploy_key
+    IdentitiesOnly yes
+EOF
+chmod 600 ~/.ssh/config
+```
+
+Clone using the SSH URL (note the `git@` prefix):
+
+```bash
+git clone git@github.com:biswajitghosh01/personal_finance_app.git /opt/finance/app
+```
+
+Verify the connection any time with:
+
+```bash
+ssh -T git@github.com
+```
+
+A successful result prints something like
+`Hi biswajitghosh01! You've successfully authenticated...`.
+
+#### After cloning
+
+```bash
+cd /opt/finance/app
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -358,15 +573,34 @@ PY
 chmod 600 .env
 ```
 
-Replace `yourdomain.duckdns.org` with your actual domain (from Step 10). If
-you want to test with the IP first, set `ALLOWED_HOSTS=<PUBLIC_IP>` and
+Replace `yourdomain.duckdns.org` with the actual domain from Step 10. If you
+want to test with the IP first, set `ALLOWED_HOSTS=<PUBLIC_IP>` and
 `SESSION_COOKIE_SECURE=false` temporarily.
+
+Pre-create the `instance/` directory that systemd's `ReadWritePaths=`
+directive requires to exist before the service starts:
+
+```bash
+mkdir -p /opt/finance/app/instance
+chmod 700 /opt/finance/app/instance
+```
 
 Read the generated password once:
 
 ```bash
 grep '^DEFAULT_PASSWORD=' .env
 ```
+
+#### Troubleshooting the clone
+
+| Symptom                                                                                   | Fix                                                                                                                               |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `Invalid username or token. Password authentication is not supported for Git operations.` | You used your GitHub password. Switch to a PAT (Method A) or a Deploy Key (Method B).                                             |
+| `Permission denied (publickey)`                                                           | The SSH key is not added to GitHub, or `~/.ssh/config` is missing the `Host github.com` entry. Test with `ssh -T git@github.com`. |
+| `Repository not found`                                                                    | The PAT lacks the `repo` scope, or the Deploy Key was added to a different repository.                                            |
+| `Host key verification failed`                                                            | Run `ssh-keyscan github.com >> ~/.ssh/known_hosts` once on the server.                                                            |
+| Prompts for username/password on every `git pull`                                         | Configure `~/.netrc` (Method A) or switch to SSH (Method B).                                                                      |
+| `fatal: could not read Username for 'https://github.com'`                                 | No credentials are configured. Follow Method A or B from the start.                                                               |
 
 ### Step 7 — Create the systemd service
 
@@ -415,6 +649,39 @@ Check the startup banner for credentials and DB path:
 sudo journalctl -u finance -n 40 --no-pager
 ```
 
+#### Troubleshooting the systemd unit
+
+If the service fails with this error:
+
+```text
+finance.service: Failed to set up mount namespacing: /opt/finance/app/instance: No such file or directory
+finance.service: Main process exited, code=exited, status=226/NAMESPACE
+```
+
+it means the `instance/` directory that `ReadWritePaths=` expects does not
+exist. systemd refuses to start a service with `ProtectSystem=strict` unless
+every path listed under `ReadWritePaths=` already exists on disk. Fix it by
+creating the directory once:
+
+```bash
+sudo mkdir -p /opt/finance/app/instance
+sudo chown ubuntu:ubuntu /opt/finance/app/instance
+sudo chmod 700 /opt/finance/app/instance
+sudo systemctl restart finance
+sudo systemctl status finance --no-pager
+```
+
+If the restart still fails, confirm the app actually cloned correctly:
+
+```bash
+ls -la /opt/finance/app/           # app.py, requirements.txt, templates/, static/, .env, .venv, instance/
+ls -la /opt/finance/app/.venv/bin/python
+ls -la /opt/finance/app/.env
+```
+
+Any missing item indicates the clone or the `.env` creation step did not
+complete. Re-run the corresponding step.
+
 ### Step 8 — Configure Nginx as a reverse proxy
 
 ```bash
@@ -446,18 +713,35 @@ sudo mkdir -p /var/www/letsencrypt
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-### Step 9 — Configure the host firewall
+### Step 9 — (Optional) Install UFW
+
+Skip this step if you have already applied the iptables fix in Step 5.5.
+The iptables rules plus the Oracle Security List are a complete firewall for
+a single-user deployment.
+
+If you want UFW as an additional layer:
 
 ```bash
+sudo apt install -y ufw
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
 sudo ufw allow OpenSSH
-sudo ufw allow 'Nginx Full'
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
 sudo ufw --force enable
 sudo ufw status verbose
 ```
 
-Do not open port 5555. The app is reachable only through Nginx on loopback.
+**After enabling UFW, re-check iptables ordering** — UFW inserts its rules
+but does not necessarily place them before Oracle's `REJECT`:
+
+```bash
+sudo iptables -L INPUT -n --line-numbers
+```
+
+If a `REJECT` line still precedes the UFW rules, apply the manual
+insertion from Step 5.5.2. Do not open port 5555 in either UFW or iptables;
+the app is reachable only through Nginx on loopback.
 
 ### Step 10 — Point a free domain at the server
 
@@ -478,7 +762,8 @@ option is **DuckDNS**.
    nslookup myfinance.duckdns.org
    ```
 
-   It should return your OCI public IP.
+   It should return your OCI public IP. If it doesn't, wait 1–2 minutes for
+   DNS propagation and try again.
 
 7. Update `.env` on the server so `ALLOWED_HOSTS` matches:
 
@@ -517,13 +802,56 @@ needed. If you want one anyway, add a cron job on the server:
 
 ### Step 11 — Obtain a free TLS certificate
 
-With the domain resolving to your server, Certbot can complete the HTTP-01
-challenge:
+With the domain resolving to your server and ports 80/443 open in both the
+Security List and iptables, Certbot can complete the HTTP-01 challenge.
+
+#### 11.1 — Pre-flight verification
+
+Before running Certbot, confirm every layer is correct:
+
+```bash
+# From your local machine:
+dig +short myfinance.duckdns.org
+# Must return your OCI public IP.
+
+# On the server:
+sudo iptables -L INPUT -n --line-numbers | head -20
+# ACCEPT rules for ports 80 and 443 must come before any REJECT.
+
+sudo ss -tlnp | grep ':80'
+# Nginx must be LISTENing on 0.0.0.0:80 or *:80.
+
+sudo nginx -t
+# Configuration syntax must be OK.
+```
+
+Test the challenge path end-to-end:
+
+```bash
+# On the server:
+sudo mkdir -p /var/www/letsencrypt/.well-known/acme-challenge
+printf 'probe\n' | sudo tee /var/www/letsencrypt/.well-known/acme-challenge/probe
+sudo chmod -R 755 /var/www/letsencrypt
+
+# From your local machine:
+curl http://myfinance.duckdns.org/.well-known/acme-challenge/probe
+# Expected output: probe
+```
+
+If you see `probe`, the entire network path is clear and Certbot will
+succeed. If you see a timeout or `Connection refused`, return to Step 5.5.
+
+#### 11.2 — Run Certbot
 
 ```bash
 sudo certbot --nginx -d myfinance.duckdns.org \
-    --non-interactive --agree-tos -m you@example.com --redirect
+    --non-interactive --agree-tos -m you@example.com --redirect \
+    --nginx-sleep-seconds 5
 ```
+
+The `--nginx-sleep-seconds 5` gives Nginx five seconds to reload after
+Certbot's temporary configuration change. On smaller Always Free shapes,
+the default one-second wait is sometimes not enough.
 
 Certbot rewrites the Nginx server block with the certificate paths and adds
 an HTTPS redirect. Verify the renewal timer:
@@ -532,6 +860,82 @@ an HTTPS redirect. Verify the renewal timer:
 systemctl list-timers | grep certbot
 sudo certbot renew --dry-run
 ```
+
+#### 11.3 — Troubleshooting the Certbot failure
+
+If Certbot fails with:
+
+```text
+Hint: The Certificate Authority failed to verify the temporary nginx
+configuration changes made by Certbot. Ensure the listed domains point to
+this nginx server and that it is accessible from the internet.
+Some challenges have failed.
+```
+
+work through these causes in order:
+
+**Cause 1 — Oracle's iptables firewall (most common).** Re-check the INPUT
+chain ordering as shown in Step 5.5.1. If a `REJECT` precedes port 80,
+re-apply the fix in Step 5.5.2 and re-run Certbot.
+
+**Cause 2 — DNS mismatch.** Confirm the domain resolves to the server's
+public IP:
+
+```bash
+dig +short myfinance.duckdns.org
+```
+
+Compare against the IP shown in the OCI Console. If they differ, update
+DuckDNS with the correct IP.
+
+**Cause 3 — Nginx not listening on port 80.** Verify:
+
+```bash
+sudo ss -tlnp | grep ':80'
+```
+
+The output must include `0.0.0.0:80` or `*:80`. If it only shows
+`127.0.0.1:80`, the server block has the wrong `listen` directive.
+
+**Cause 4 — Stale redirect intercepting the challenge.** If your port-80
+server block has a `return 301 https://$host$request_uri` that runs before
+the `location ^~ /.well-known/acme-challenge/` block, the HTTP-01 challenge
+is redirected to HTTPS and fails. Ensure the challenge location is the
+first `location` block in the port-80 server, and add an explicit `allow
+all`:
+
+```nginx
+location ^~ /.well-known/acme-challenge/ {
+    allow all;
+    root /var/www/letsencrypt;
+}
+```
+
+**Cause 5 — Nginx reload timing.** Re-run Certbot with
+`--nginx-sleep-seconds 5`. If you already have a certificate config file,
+edit `/etc/letsencrypt/renewal/myfinance.duckdns.org.conf` and add:
+
+```
+nginx_sleep_seconds = 5
+```
+
+under the `[renewalparams]` section.
+
+**Read the detailed log.** Certbot records the exact HTTP status and the
+challenge URL:
+
+```bash
+sudo cat /var/log/letsencrypt/letsencrypt.log | tail -100
+```
+
+Look for the `"detail"` field in the JSON error response. Common values:
+
+| Detail message                    | Cause                                                       |
+| --------------------------------- | ----------------------------------------------------------- |
+| `Invalid response from ...: 404`  | Nginx isn't serving the challenge path (Cause 4)            |
+| `Invalid response from ...: 403`  | Nginx is denying access to the challenge path (permissions) |
+| `Timeout` or `Connection refused` | Port 80 blocked at network layer (Cause 1 or 2)             |
+| `DNS problem: NXDOMAIN`           | Domain doesn't resolve (Cause 2)                            |
 
 ### Step 12 — Verify the deployment
 
@@ -589,31 +993,44 @@ database has full access to your financial records.
 
 ### Deployment troubleshooting
 
-**Site unreachable after opening ports.** OCI's Security List is only half
-the firewall. Confirm UFW is not blocking:
+**`sudo: ufw: command not found`.** UFW is not installed on Oracle's Ubuntu
+images by default, and the deployment guide deliberately does not install it.
+This is expected and harmless — the OCI Security List plus iptables is a
+complete firewall. Skip the UFW steps and apply the iptables fix in Step 5.5.
+
+**Certbot says the CA cannot verify the temporary Nginx configuration.** The
+Let's Encrypt servers couldn't reach the challenge file. Work through the
+five causes in Step 11.3. On Oracle Cloud, the hidden iptables firewall
+(Step 5.5) is almost always the culprit.
+
+**Site unreachable after opening ports.** Confirm iptables ordering first:
 
 ```bash
-sudo ufw status verbose
+sudo iptables -L INPUT -n --line-numbers | head -20
 ```
 
-If the app is not listening on `127.0.0.1:5555`, check
-`sudo journalctl -u finance -n 60 --no-pager`.
-
-**Certbot fails the HTTP-01 challenge.** Test the webroot locally and from
-another machine:
+Then confirm Nginx is listening:
 
 ```bash
-sudo mkdir -p /var/www/letsencrypt/.well-known/acme-challenge
-printf 'probe\n' | sudo tee /var/www/letsencrypt/.well-known/acme-challenge/probe
-sudo chmod -R 755 /var/www/letsencrypt
-
-curl -i -H 'Host: myfinance.duckdns.org' http://127.0.0.1/.well-known/acme-challenge/probe
-curl -i http://myfinance.duckdns.org/.well-known/acme-challenge/probe
+sudo ss -tlnp | grep ':80'
 ```
 
-Both must return `200` and `probe`. A local `403` means Nginx cannot read the
-challenge directory — verify permissions. A remote timeout means the Security
-List or UFW is still blocking port 80.
+If the app is not listening on `127.0.0.1:5555`, check:
+
+```bash
+sudo journalctl -u finance -n 60 --no-pager
+```
+
+**`Failed to set up mount namespacing: /opt/finance/app/instance: No such
+file or directory`.** The systemd unit's `ReadWritePaths=` requires the
+directory to exist before the service starts. Create it once:
+
+```bash
+sudo mkdir -p /opt/finance/app/instance
+sudo chown ubuntu:ubuntu /opt/finance/app/instance
+sudo chmod 700 /opt/finance/app/instance
+sudo systemctl restart finance
+```
 
 **`ALLOWED_HOSTS` errors (HTTP 400).** Confirm the domain in `.env` matches
 what the browser is sending:
@@ -637,11 +1054,11 @@ sqlite3 /opt/finance/app/instance/finance.db \
 the stylesheet with a version query parameter. Bump it in the template and
 push the update.
 
-**IP-address certificates.** Let's Encrypt now issues certificates for bare
-IP addresses using the `shortlived` profile (valid for 160 hours).
-Use `--preferred-profile shortlived` combined with `--ip-address <ip>` in
-Certbot. This is useful for testing without a domain, but for a persistent
-deployment a real domain is strongly preferred.
+**Git authentication failures during clone or pull.** GitHub removed
+password authentication in August 2021. If `git clone` or `git pull` fails
+with `Invalid username or token` or `Password authentication is not
+supported for Git operations`, switch to a Personal Access Token or an SSH
+Deploy Key — see the troubleshooting table in Step 6.
 
 ### Configuration used by a public deployment
 
@@ -722,8 +1139,9 @@ binding.
 
 On the server side, the deployment guide configures:
 
-- Security List ingress restricted to TCP 22, 80, and 443 only.
-- UFW denying all inbound except SSH and Nginx Full.
+- OCI Security List ingress restricted to TCP 22, 80, and 443 only.
+- Explicit iptables `ACCEPT` rules for ports 80 and 443, inserted before
+  Oracle's default `REJECT` rule, and persisted with `netfilter-persistent`.
 - systemd hardening (`NoNewPrivileges`, `ProtectSystem=strict`,
   `PrivateTmp`, `MemoryDenyWriteExecute`).
 - Fail2ban for SSH brute-force protection.
