@@ -114,7 +114,6 @@ CURRENCY_SYMBOLS = {
 TRANSACTION_TYPES = (
     'INCOME', 'EXPENSE', 'TRANSFER', 'INVESTMENT', 'LIABILITY_PAYMENT',
 )
-
 LIABILITY_TYPES = ('Personal Loan', 'Home Loan', 'Auto Loan', 'Other')
 LIABILITY_STATUSES = ('Active', 'Paid Off', 'In Dispute', 'Deferred')
 PAYMENT_FREQUENCIES = (
@@ -125,7 +124,6 @@ PAYMENT_METHODS = (
     'Auto-pay', 'ACH Transfer', 'Wire', 'Check',
     'Cash', 'Standing Instruction', 'Other',
 )
-
 ACCOUNT_TYPES = ('Savings', 'Current', 'Salary', 'NRE', 'NRO', 'FCNR', 'Other')
 RETIRAL_FUND_TYPES = (
     'EPF', 'PPF', 'NPS', 'Superannuation',
@@ -189,10 +187,19 @@ CREATE TABLE IF NOT EXISTS recurring_deposits (
 CREATE INDEX IF NOT EXISTS idx_recurring_deposits_user_maturity ON recurring_deposits(user_id,maturity_date);
 CREATE TABLE IF NOT EXISTS stocks (
  id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL,
- stock_name TEXT NOT NULL, market TEXT NOT NULL CHECK(market IN ('India','United States')),
+ stock_name TEXT NOT NULL,
+ ticker TEXT, stock_symbol TEXT, company_name TEXT, isin_code TEXT,
+ market TEXT NOT NULL CHECK(market IN ('India','United States')),
  number_of_shares TEXT NOT NULL, buy_price TEXT NOT NULL,
- current_price TEXT NOT NULL, buy_transaction_date TEXT NOT NULL,
+ current_price TEXT NOT NULL, previous_close TEXT NOT NULL DEFAULT '0',
+ buy_transaction_date TEXT NOT NULL,
  currency TEXT NOT NULL, notes TEXT NOT NULL DEFAULT '',
+ sale_date TEXT, sale_units TEXT NOT NULL DEFAULT '0', sell_price TEXT NOT NULL DEFAULT '0',
+ gst TEXT NOT NULL DEFAULT '0', brokerage TEXT NOT NULL DEFAULT '0',
+ stt TEXT NOT NULL DEFAULT '0', exchange_fees TEXT NOT NULL DEFAULT '0',
+ realized_profit_loss TEXT NOT NULL DEFAULT '0',
+ us_total_invested TEXT NOT NULL DEFAULT '0',
+ us_current_value TEXT NOT NULL DEFAULT '0',
  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -314,6 +321,14 @@ def _run_schema_migrations(connection):
         'brokerage': "TEXT NOT NULL DEFAULT '0'",
         'stt': "TEXT NOT NULL DEFAULT '0'",
         'exchange_fees': "TEXT NOT NULL DEFAULT '0'",
+        'ticker': 'TEXT',
+        'stock_symbol': 'TEXT',
+        'company_name': 'TEXT',
+        'isin_code': 'TEXT',
+        'previous_close': "TEXT NOT NULL DEFAULT '0'",
+        'realized_profit_loss': "TEXT NOT NULL DEFAULT '0'",
+        'us_total_invested': "TEXT NOT NULL DEFAULT '0'",
+        'us_current_value': "TEXT NOT NULL DEFAULT '0'",
     }.items():
         if column not in stock_columns:
             connection.execute(f'ALTER TABLE stocks ADD COLUMN {column} {definition}')
@@ -352,7 +367,10 @@ def ensure_default_user(connection=None):
             connection.commit()
             return username
 
-        stored_hash = (existing['password_hash'] or '') if isinstance(existing, sqlite3.Row) else (existing[1] or '')
+        stored_hash = (
+            existing['password_hash'] if isinstance(existing, sqlite3.Row)
+            else existing[1]
+        ) or ''
         user_id = existing['id'] if isinstance(existing, sqlite3.Row) else existing[0]
 
         if len(stored_hash) < 40 or not stored_hash.startswith('$argon2'):
@@ -458,6 +476,17 @@ def clean_number(value):
     return format(number, 'f')
 
 
+def clean_signed_number(value):
+    """Like clean_number but permits negatives — used for realized P&L."""
+    try:
+        number = Decimal((value or '0').strip())
+    except InvalidOperation:
+        raise ValueError('Enter a valid number.')
+    if not number.is_finite() or abs(number) > Decimal('1000000000000000'):
+        raise ValueError('Number is outside the allowed range.')
+    return format(number, 'f')
+
+
 def clean_date(value):
     value = (value or '').strip()
     if value:
@@ -526,7 +555,7 @@ def security_headers(response):
     return response
 
 
-# ---------------------------------------------------------------- auth
+# ---------------------------------------------------------------- auth routes
 @app.route('/login', methods=['GET', 'POST'])
 @limiter.limit('5 per minute; 20 per hour')
 def login():
@@ -645,16 +674,23 @@ def dashboard():
         value = add(assets, row['currency'], row['current_value'])
         allocation['RECURRING_DEPOSIT'] = allocation.get('RECURRING_DEPOSIT', Decimal(0)) + value
 
+    # Stocks — use explicit USD values when present, otherwise fall back to
+    # units × current_price for Indian positions (remaining after any sales).
     for row in db.execute(
-        '''
-        SELECT currency,
-            MAX(0, CAST(number_of_shares AS REAL) - CAST(COALESCE(sale_units, '0') AS REAL)) AS remaining_units,
-            current_price
-        FROM stocks WHERE user_id=?
-        ''',
+        'SELECT market, currency, number_of_shares, current_price, sale_units, '
+        'us_total_invested, us_current_value FROM stocks WHERE user_id=?',
         (uid,),
     ):
-        value = Decimal(str(row['remaining_units'])) * Decimal(str(row['current_price']))
+        keys = row.keys()
+        us_invested = float(row['us_total_invested'] or 0) if 'us_total_invested' in keys else 0.0
+        us_value = float(row['us_current_value'] or 0) if 'us_current_value' in keys else 0.0
+        if row['market'] == 'United States' and (us_invested > 0 or us_value > 0):
+            value = Decimal(str(us_value))
+        else:
+            units = Decimal(str(row['number_of_shares'] or '0'))
+            sold = Decimal(str(row['sale_units'] or '0'))
+            price = Decimal(str(row['current_price'] or '0'))
+            value = max(units - sold, Decimal(0)) * price
         add(assets, row['currency'], value)
         allocation['SHARE'] = allocation.get('SHARE', Decimal(0)) + value
 
@@ -1368,35 +1404,55 @@ def recurring_deposit_delete(deposit_id):
 
 # ---------------------------------------------------------------- stocks
 def _stock_form_values(form):
-    stock_name = clean_text(form.get('stock_name'), 120, True)
     market = form.get('market', '')
     if market not in ('India', 'United States'):
         raise ValueError('Invalid stock market.')
-    units = clean_number(form.get('number_of_shares'))
-    if Decimal(units) <= 0:
-        raise ValueError('Purchased Units must be greater than zero.')
-    buy_price = clean_number(form.get('buy_price'))
-    current_price = clean_number(form.get('current_price'))
+
+    if market == 'United States':
+        ticker = clean_text(form.get('ticker'), 20, True).upper()
+        stock_symbol = None
+        company_name = clean_text(form.get('company_name'), 120, True)
+        stock_name = company_name
+        isin_code = None
+        currency = 'USD'
+
+        us_total_invested = clean_number(form.get('us_total_invested'))
+        us_current_value = clean_number(form.get('us_current_value'))
+
+        # The stocks table still requires these columns; store neutral values.
+        units = '1'
+        buy_price = '0'
+        current_price = '0'
+    else:
+        stock_symbol = clean_text(form.get('stock_symbol'), 20, True).upper()
+        company_name = clean_text(form.get('company_name'), 120, True)
+        stock_name = company_name
+        ticker = None
+        isin_code = clean_text(form.get('isin_code'), 12, True).upper()
+        if not re.fullmatch(r'IN[A-Z0-9]{10}', isin_code):
+            raise ValueError('ISIN must be 12 characters starting with IN.')
+        currency = 'INR'
+
+        us_total_invested = '0'
+        us_current_value = '0'
+
+        units = clean_number(form.get('number_of_shares'))
+        if Decimal(units) <= 0:
+            raise ValueError('Quantity must be greater than zero.')
+        buy_price = clean_number(form.get('buy_price'))
+        current_price = clean_number(form.get('current_price'))
+
     buy_date = clean_date(form.get('buy_transaction_date'))
     if not buy_date:
         raise ValueError('Buy Transaction Date is required.')
-    currency = form.get('currency', '').upper()
-    if currency not in CURRENCIES:
-        raise ValueError('Invalid currency.')
-    if market == 'India' and currency != 'INR':
-        raise ValueError('Indian stocks must use INR.')
-    if market == 'United States' and currency != 'USD':
-        raise ValueError('US stocks must use USD.')
 
     sale_date = clean_date(form.get('sale_date'))
     sale_units = clean_number(form.get('sale_units'))
     sell_price = clean_number(form.get('sell_price'))
-    if Decimal(sale_units) > Decimal(units):
-        raise ValueError('Sale Units cannot exceed Purchased Units.')
-    if Decimal(sale_units) > 0 and (not sale_date or Decimal(sell_price) <= 0):
-        raise ValueError('Sale Date and Sell Price are required when Sale Units are entered.')
     if sale_date and sale_date < buy_date:
         raise ValueError('Sale Date cannot be before Buy Transaction Date.')
+
+    realized_pnl = clean_signed_number(form.get('realized_profit_loss'))
 
     fees = (
         clean_number(form.get('gst')),
@@ -1405,9 +1461,13 @@ def _stock_form_values(form):
         clean_number(form.get('exchange_fees')),
     )
     notes = clean_text(form.get('notes'), 1000)
+
+    # previous_close is retained in the schema but no longer collected from the form.
     return (
-        stock_name, market, units, buy_price, current_price, buy_date, currency,
-        sale_date, sale_units, sell_price, *fees, notes,
+        stock_name, ticker, stock_symbol, company_name, isin_code, market,
+        units, buy_price, current_price, '0', buy_date, currency,
+        sale_date, sale_units, sell_price, *fees, realized_pnl,
+        us_total_invested, us_current_value, notes,
     )
 
 
@@ -1417,53 +1477,89 @@ def stocks():
     db = get_db()
     uid = session['uid']
 
-    lots = db.execute(
-        '''
-        SELECT *, COALESCE(sale_units,'0') AS sale_units,
-               COALESCE(sell_price,'0') AS sell_price,
-               COALESCE(gst,'0') AS gst,
-               COALESCE(brokerage,'0') AS brokerage,
-               COALESCE(stt,'0') AS stt,
-               COALESCE(exchange_fees,'0') AS exchange_fees
-        FROM stocks WHERE user_id=?
-        ORDER BY UPPER(TRIM(stock_name)), buy_transaction_date, id
-        ''',
-        (uid,),
-    ).fetchall()
-
     rows = db.execute(
-        '''
-        SELECT MIN(id) AS first_id, MIN(stock_name) AS stock_name, market, currency,
-        COUNT(*) AS lot_count,
-        SUM(CAST(number_of_shares AS REAL)) AS total_purchased_units,
-        SUM(CAST(COALESCE(sale_units,'0') AS REAL)) AS total_sold_units,
-        SUM(MAX(0, CAST(number_of_shares AS REAL) - CAST(COALESCE(sale_units,'0') AS REAL))) AS balance_units,
-        SUM((CAST(number_of_shares AS REAL) * CAST(buy_price AS REAL)
-             + CAST(COALESCE(gst,'0') AS REAL)
-             + CAST(COALESCE(brokerage,'0') AS REAL)
-             + CAST(COALESCE(stt,'0') AS REAL)
-             + CAST(COALESCE(exchange_fees,'0') AS REAL))
-            * MAX(0, CAST(number_of_shares AS REAL) - CAST(COALESCE(sale_units,'0') AS REAL))
-            / CAST(number_of_shares AS REAL)) AS total_cost_price,
-        SUM(MAX(0, CAST(number_of_shares AS REAL) - CAST(COALESCE(sale_units,'0') AS REAL))
-            * CAST(current_price AS REAL)) AS current_holding_value
-        FROM stocks WHERE user_id=?
-        GROUP BY UPPER(TRIM(stock_name)), market, currency
-        ORDER BY UPPER(TRIM(stock_name))
-        ''',
+        'SELECT * FROM stocks WHERE user_id=? '
+        'ORDER BY market, UPPER(TRIM(stock_name)), buy_transaction_date, id',
         (uid,),
     ).fetchall()
 
-    holdings = []
-    for row in rows:
-        item = dict(row)
-        item['profit_loss'] = item['current_holding_value'] - item['total_cost_price']
-        item['return_percentage'] = (
-            item['profit_loss'] / item['total_cost_price'] * 100
-        ) if item['total_cost_price'] else 0
-        holdings.append(item)
+    def build_row(row):
+        keys = row.keys()
+        sale_units = float(row['sale_units'] or 0)
+        sell_price = float(row['sell_price'] or 0)
 
-    return render_template('stocks.html', rows=holdings, lots=lots)
+        fees_total = sum(
+            float(row[k] or 0) for k in ('gst', 'brokerage', 'stt', 'exchange_fees')
+            if k in keys
+        )
+
+        us_invested = float(row['us_total_invested'] or 0) if 'us_total_invested' in keys else 0.0
+        us_value = float(row['us_current_value'] or 0) if 'us_current_value' in keys else 0.0
+        use_us_values = row['market'] == 'United States' and (us_invested > 0 or us_value > 0)
+
+        if use_us_values:
+            units = 0.0
+            buy_price = 0.0
+            current_price = 0.0
+            previous_close = 0.0
+            remaining = 0.0
+            original_cost = us_invested
+            total_invested = us_invested
+            current_value = us_value
+        else:
+            units = float(row['number_of_shares'] or 0)
+            buy_price = float(row['buy_price'] or 0)
+            current_price = float(row['current_price'] or 0)
+            previous_close = float(row['previous_close'] or 0)
+            remaining = max(units - sale_units, 0)
+            original_cost = (units * buy_price) + fees_total
+            total_invested = (remaining * buy_price) + fees_total
+            current_value = remaining * current_price
+
+        unrealized = current_value - total_invested
+        unrealized_pct = (unrealized / total_invested * 100) if total_invested else 0
+
+        realized = float(row['realized_profit_loss'] or 0) if 'realized_profit_loss' in keys else 0.0
+        if realized == 0 and sale_units > 0 and not use_us_values:
+            realized = sale_units * (sell_price - buy_price)
+
+        change_pct = ((current_price - previous_close) / previous_close * 100) if previous_close else 0
+
+        item = dict(row)
+        item.update({
+            'units': units,
+            'remaining_units': remaining,
+            'buy_price': buy_price,
+            'current_price': current_price,
+            'previous_close': previous_close,
+            'original_cost': original_cost,
+            'total_invested': total_invested,
+            'current_value': current_value,
+            'unrealized': unrealized,
+            'unrealized_pct': unrealized_pct,
+            'realized': realized,
+            'change_pct': change_pct,
+            'use_us_values': use_us_values,
+        })
+        return item
+
+    us_rows = [build_row(r) for r in rows if r['market'] == 'United States']
+    india_rows = [build_row(r) for r in rows if r['market'] == 'India']
+
+    summary = {}
+    for item in us_rows + india_rows:
+        code = item['currency']
+        bucket = summary.setdefault(code, {'invested': 0.0, 'current': 0.0, 'count': 0})
+        bucket['invested'] += item['total_invested']
+        bucket['current'] += item['current_value']
+        bucket['count'] += 1
+
+    return render_template(
+        'stocks.html',
+        us_rows=us_rows,
+        india_rows=india_rows,
+        summary=summary,
+    )
 
 
 @app.route('/stocks/new', methods=['GET', 'POST'])
@@ -1474,18 +1570,20 @@ def stock_new():
             values = _stock_form_values(request.form)
         except ValueError as exc:
             flash(str(exc), 'error')
-            return render_template('stock_edit.html', stock=request.form, currencies=CURRENCIES)
+            return render_template('stock_edit.html', stock=request.form, is_edit=False)
         cursor = get_db().execute(
-            '''INSERT INTO stocks(user_id,stock_name,market,number_of_shares,buy_price,current_price,
-               buy_transaction_date,currency,sale_date,sale_units,sell_price,gst,brokerage,stt,
-               exchange_fees,notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+            '''INSERT INTO stocks(user_id,stock_name,ticker,stock_symbol,company_name,isin_code,
+               market,number_of_shares,buy_price,current_price,previous_close,buy_transaction_date,
+               currency,sale_date,sale_units,sell_price,gst,brokerage,stt,exchange_fees,
+               realized_profit_loss,us_total_invested,us_current_value,notes,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
             (session['uid'], *values, now(), now()),
         )
         get_db().commit()
         audit('STOCK_CREATE', cursor.lastrowid)
         flash('Stock transaction saved.', 'success')
         return redirect(url_for('stocks'))
-    return render_template('stock_edit.html', stock={}, currencies=CURRENCIES)
+    return render_template('stock_edit.html', stock={}, is_edit=False)
 
 
 @app.route('/stocks/<int:stock_id>/edit', methods=['GET', 'POST'])
@@ -1493,27 +1591,43 @@ def stock_new():
 def stock_edit(stock_id):
     db = get_db()
     row = db.execute(
-        'SELECT * FROM stocks WHERE id=? AND user_id=?', (stock_id, session['uid']),
+        'SELECT * FROM stocks WHERE id=? AND user_id=?',
+        (stock_id, session['uid']),
     ).fetchone()
     if not row:
         abort(404)
+
     if request.method == 'POST':
         try:
             values = _stock_form_values(request.form)
         except ValueError as exc:
             flash(str(exc), 'error')
-            return render_template('stock_edit.html', stock=request.form, stock_id=stock_id, currencies=CURRENCIES)
+            return render_template(
+                'stock_edit.html',
+                stock=request.form,
+                stock_id=stock_id,
+                is_edit=True,
+            )
         db.execute(
-            '''UPDATE stocks SET stock_name=?,market=?,number_of_shares=?,buy_price=?,current_price=?,
-               buy_transaction_date=?,currency=?,sale_date=?,sale_units=?,sell_price=?,gst=?,brokerage=?,
-               stt=?,exchange_fees=?,notes=?,updated_at=? WHERE id=? AND user_id=?''',
+            '''UPDATE stocks SET stock_name=?, ticker=?, stock_symbol=?, company_name=?, isin_code=?,
+               market=?, number_of_shares=?, buy_price=?, current_price=?, previous_close=?,
+               buy_transaction_date=?, currency=?, sale_date=?, sale_units=?, sell_price=?,
+               gst=?, brokerage=?, stt=?, exchange_fees=?, realized_profit_loss=?,
+               us_total_invested=?, us_current_value=?, notes=?,
+               updated_at=? WHERE id=? AND user_id=?''',
             (*values, now(), stock_id, session['uid']),
         )
         db.commit()
         audit('STOCK_UPDATE', stock_id)
         flash('Stock transaction updated.', 'success')
         return redirect(url_for('stocks'))
-    return render_template('stock_edit.html', stock=row, stock_id=stock_id, currencies=CURRENCIES)
+
+    return render_template(
+        'stock_edit.html',
+        stock=row,
+        stock_id=stock_id,
+        is_edit=True,
+    )
 
 
 @app.post('/stocks/<int:stock_id>/delete')
@@ -2200,11 +2314,6 @@ def _budget_form_values(form):
 
 
 def _budget_summary_for_month(db, uid, month):
-    """
-    Return (rows, summary) for the given month:
-      rows    — one dict per budget with limit, spent, remaining, percent
-      summary — per-currency totals for the summary card
-    """
     budget_rows = db.execute(
         'SELECT * FROM budgets WHERE user_id=? ORDER BY currency, category',
         (uid,),

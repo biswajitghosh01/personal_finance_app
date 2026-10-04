@@ -2,8 +2,9 @@
 
 A single-user personal finance dashboard: bank accounts, fixed and recurring
 deposits, Indian and US stocks, mutual funds, metals, ESOPs, retirals,
-liabilities, and transactions — persisted to a local SQLite file, with a
-per-currency net-worth dashboard, allocation charts, and cashflow trends.
+liabilities, transactions, and monthly budgets — persisted to a local SQLite
+file, with a per-currency net-worth dashboard, allocation charts, cashflow
+trends, and a budget tracker.
 
 ## Quick Start
 
@@ -31,16 +32,10 @@ chmod 700 instance
 .venv/bin/python app.py
 ```
 
-Then open `http://localhost:5555` and sign in with:
+Then open `http://localhost:5555` and sign in with `admin` / `ChangeMe-5555!`.
 
-```text
-Username: admin
-Password: ChangeMe-5555!
-```
-
-On startup the app prints a banner that includes the resolved database path
-and the current seeded credentials, so you can confirm at a glance which
-SQLite file the process is using:
+On startup the app prints a banner with the resolved database path and
+credentials:
 
 ```text
 Finance Vault: http://127.0.0.1:5555
@@ -52,15 +47,11 @@ Database     : /path/to/project/instance/finance.db
   Password         ChangeMe-5555!
   Status           must be changed on first login
 ============================================================
-  Change this password immediately after signing in.
-============================================================
-Portal is now Live. Press Ctrl+C to stop the server.
 ```
 
 The first user is created automatically when the database is initialized from
 `DEFAULT_USER` and `DEFAULT_PASSWORD` in `.env`. The account is forced to
-change its password on first login. If the seeded row already exists with a
-valid Argon2id hash, startup is idempotent and does not overwrite it.
+change its password on first login.
 
 ## Start
 
@@ -69,75 +60,56 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-Open `http://localhost:5555`.
-
-Initial credentials: `admin` / `ChangeMe-5555!`. The password must be changed
-after first login.
+Open `http://localhost:5555`. Initial credentials: `admin` / `ChangeMe-5555!`.
 
 ## Files excluded from version control
 
 A fresh clone contains no secrets, no database, and no virtual environment.
-The application refuses to start until `.env` exists, and it exits
-immediately with:
+The application refuses to start until `.env` exists:
 
 ```text
 RuntimeError: Missing .env. Start the application with ./setup.sh
 ```
 
-| Path                                                 | Contents                                                                                   | Created by                | Required before   |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------- | ----------------- |
-| `.env`                                               | `SECRET_KEY`, `DATA_KEY`, `DEFAULT_USER`, `DEFAULT_PASSWORD`, optional deployment settings | `setup.sh` or `deploy.sh` | Application start |
-| `instance/`                                          | SQLite database directory, mode `700`                                                      | `setup.sh`                | Application start |
-| `instance/finance.db`                                | All financial records, mode `600`                                                          | `app.py` on first run     | First login       |
-| `instance/finance.db-shm`, `instance/finance.db-wal` | SQLite write-ahead log sidecars                                                            | SQLite at runtime         | Automatic         |
-| `.venv/`                                             | Virtual environment and dependencies                                                       | `setup.sh`                | Application start |
-| `__pycache__/`, `*.pyc`                              | Byte-compiled Python                                                                       | Python                    | Automatic         |
-| `*.log`                                              | Local log output                                                                           | Runtime                   | Automatic         |
+| Path                    | Contents                                                                                   | Created by            |
+| ----------------------- | ------------------------------------------------------------------------------------------ | --------------------- |
+| `.env`                  | `SECRET_KEY`, `DATA_KEY`, `DEFAULT_USER`, `DEFAULT_PASSWORD`, optional deployment settings | `setup.sh`            |
+| `instance/`             | SQLite database directory, mode `700`                                                      | `setup.sh`            |
+| `instance/finance.db`   | All financial records, mode `600`                                                          | `app.py` on first run |
+| `instance/finance.db-*` | SQLite WAL sidecars                                                                        | SQLite at runtime     |
+| `.venv/`                | Virtual environment                                                                        | `setup.sh`            |
+| `__pycache__/`, `*.pyc` | Byte-compiled Python                                                                       | Python                |
+| `*.log`                 | Local log output                                                                           | Runtime               |
 
 `.env` and `instance/finance.db` are a matched pair. `DATA_KEY` encrypts
 account references inside the database, so a database restored alongside a
-different `DATA_KEY` cannot be decrypted. Always back up both together. Setup
-never replaces an existing `.env`; if its required settings are missing or
-invalid, preserve the file and repair it deliberately rather than generating
-a new key against an existing database.
+different `DATA_KEY` cannot be decrypted. Always back up both together.
 
 ## Recreating the ignored files
 
 ### Option 1: let setup.sh do everything
 
-`setup.sh` is idempotent and performs every step below. It creates or
-validates `.venv`, installs requirements with that environment's Python, sets
-`umask 077`, writes `.env` atomically only if absent, protects `.env` and
-`instance/`, and starts the application with the same virtual-environment
-interpreter. An existing `.env` and database are preserved. An incomplete
-`.venv` is moved aside as `.venv.invalid-<timestamp>` before a new one is
-created.
+`setup.sh` is idempotent. It creates or validates `.venv`, installs
+requirements, sets `umask 077`, writes `.env` atomically only if absent,
+protects `.env` and `instance/`, and starts the application. An existing
+`.env` and database are preserved.
 
 ```bash
 chmod +x setup.sh
 ./setup.sh
 ```
 
-An existing `.env` is never overwritten, so it is safe to re-run after a
-dependency change.
-
-To select a particular Python installation, set `PYTHON_BIN` when starting
-setup:
+To select a Python installation:
 
 ```bash
 PYTHON_BIN="$(command -v python3)" ./setup.sh
 ```
 
-If the default port is already in use, choose another one without editing the
-app:
+To change the port:
 
 ```bash
 BIND_PORT=5556 ./setup.sh
 ```
-
-Incomplete virtual environments are preserved under
-`.venv.invalid-<timestamp>`. These backups, virtual environments, secrets,
-databases, Python caches, and logs are excluded by `.gitignore`.
 
 ### Option 2: create each file manually
 
@@ -151,9 +123,6 @@ python -m pip install -r requirements.txt
 ```
 
 #### 2. `.env`
-
-Both keys must be newly generated; never reuse an example value. `DATA_KEY`
-must be a valid Fernet key, because `app.py` passes it straight to `Fernet()`.
 
 ```bash
 umask 077
@@ -170,98 +139,31 @@ PY
 chmod 600 .env
 ```
 
-The resulting file has this shape, with your own generated values:
-
-```text
-SECRET_KEY=<64-byte url-safe token>
-DATA_KEY=<44-character Fernet key>
-DEFAULT_USER=admin
-DEFAULT_PASSWORD=ChangeMe-5555!
-```
-
-All four settings are mandatory. A missing one aborts startup with
-`Missing required setting: <NAME>`. The optional settings `ALLOWED_HOSTS`,
+All four settings are mandatory. Optional settings `ALLOWED_HOSTS`,
 `SESSION_COOKIE_SECURE`, `TRUSTED_PROXY_COUNT`, `BIND_HOST`, and `BIND_PORT`
-default to local-only values and are described under
-[Deploying on a cloud Linux server](#deploying-on-a-cloud-linux-server).
-Parsing rules applied by `app.py`:
+default to local-only values and are described in the deployment section.
 
-- One `KEY=value` pair per line; lines beginning with `#` are ignored.
-- Values are used literally; do not wrap them in quotes.
-- Variables already present in the process environment take precedence over
-  the file.
-
-Choose a different `DEFAULT_PASSWORD` if you prefer. The account is created
-with a forced-rotation flag, and the application rejects reusing the default
-value when you set the real password.
-
-If the account row already exists in the database with a valid Argon2id hash,
-`ensure_default_user()` does nothing. Only the very first insert uses
-`DEFAULT_PASSWORD` — subsequent logins require whatever password was set
-during the forced change-password flow.
-
-#### Create the first user
-
-The first user is created automatically when the database is initialized. You
-do not create it manually in the UI or a shell script.
-
-Before starting the app, define the default credentials in `.env`:
-
-```text
-DEFAULT_USER=admin
-DEFAULT_PASSWORD=ChangeMe-5555!
-```
-
-When the app boots with a fresh `instance/finance.db`, `init_db()` runs and
-inserts the user with `must_change=1`. The password is stored as an Argon2id
-hash, and the first login requires changing it. If you keep the default
-credentials, the app will reject reusing them once you set a new password.
-
-Because the app is idempotent, `ensure_default_user()` also runs on the first
-request via `@app.before_request` — so the admin exists even if the process
-was launched through `flask run`, `gunicorn`, or a test harness that never
-touches `app.py`'s `__main__` block.
-
-#### 3. `instance/` directory
+#### 3. `instance/` directory and database
 
 ```bash
 mkdir -p instance
 chmod 700 instance
-```
-
-#### 4. `instance/finance.db`
-
-The database is created automatically on the first run. `app.py` executes
-its schema script, applies in-place column migrations for `liabilities`
-(`emi_date`) and `stocks` (`sale_date`, `sale_units`, `sell_price`, `gst`,
-`brokerage`, `stt`, `exchange_fees`), inserts the default user with an
-Argon2id hash, and sets the file to mode `600`.
-
-```bash
 .venv/bin/python app.py
 ```
 
-Then open `http://localhost:5555` and sign in with `DEFAULT_USER` and
-`DEFAULT_PASSWORD`. You are redirected to the password-change page before any
-other route is reachable.
+The database is created on first run. Open `http://localhost:5555` and sign
+in with `DEFAULT_USER` and `DEFAULT_PASSWORD`. You are redirected to the
+password-change page before any other route is reachable.
 
 ### Verify before first use
 
 ```bash
 ls -l .env instance/finance.db
-stat -f '%Sp %N' .env instance instance/finance.db
-```
-
-Expected permissions: `-rw-------` for `.env` and `finance.db`,
-`drwx------` for `instance`.
-
-Confirm no secret or database file is staged for commit:
-
-```bash
 git status --short --ignored | grep -E '\.env|instance/|\.venv'
 ```
 
-Every match must be marked `!!` (ignored), never `A` or `M`.
+Expected: `-rw-------` for `.env` and `finance.db`, `drwx------` for
+`instance`. All matches from `git status` must be marked `!!`, never `A`.
 
 ### Restoring from a backup
 
@@ -273,11 +175,6 @@ cp /secure/backup/finance.db instance/finance.db
 chmod 600 .env instance/finance.db
 ```
 
-If the `instance/finance.db-wal` and `instance/finance.db-shm` sidecars exist
-in the backup, copy them too, or let SQLite recreate them from a cleanly
-closed database. Restoring a database without its matching `DATA_KEY` leaves
-encrypted account references unreadable.
-
 ## Features
 
 - **Bank Accounts** — balances, rate, and per-currency totals.
@@ -287,45 +184,47 @@ encrypted account references unreadable.
 - **Recurring Deposits** — monthly contribution, tenure, interest, and
   approximate maturity using the ordinary-annuity-due future value with
   monthly compounding.
-- **Stocks** — Indian and US markets, purchase lots, optional partial sales,
-  GST/brokerage/STT/exchange fees, per-lot cost basis, current holding value,
-  and unrealised P&L.
+- **Stocks** — split into US and Indian sections with market-specific
+  fields:
+  - **US positions** track Name, Ticker, Total Amount Invested (USD),
+    Current Value (USD), and derived Investment Returns (USD and %).
+  - **Indian positions** track Stock Symbol, Company Name, ISIN Code, Qty,
+    Average Cost Price, Current Market Price, Value At Cost, Value At Market
+    Price, Realized P&L, Unrealized P&L, and Unrealized P&L %.
+  - Both markets support sale tracking, GST, brokerage, STT, exchange fees,
+    and optional partial sales. Every underlying lot is editable from the
+    Transaction Lots table.
 - **Mutual Funds** — fund house, category, SIP or lump-sum mode, invested vs.
   current value, per-currency summary.
 - **Metals** — gold, silver, and others with weight, purity, mint, and
   invested vs. current value.
-- **ESOPs** — grants with vesting dates, current price, unrealised P&L.
+- **ESOPs** — grants with vesting dates, current price, unrealised P&L, and
+  per-grant editing.
 - **Retirals** — EPF, PPF, NPS, Superannuation, and other retirement pots.
 - **Liabilities** — lender, type, status, EMI, repayment schedule, and
   outstanding percentage.
 - **Transactions** — income, expense, transfer, investment, and
-  liability-payment entries, feeding the cashflow chart on the dashboard.
-- **Dashboard** — per-currency net worth, asset allocation, assets vs.
-  liabilities, liability breakdown, metals breakdown, and quick-access tiles.
-- **Administration** — user management (add, reset password, delete), plus an
-  application-health page showing database size, record counts, audit log,
-  and the tail of the server log.
+  liability-payment entries, feeding the cashflow chart.
+- **Budgets** — monthly spending limits per category with progress bars, a
+  month selector, and a dashboard Budget Status panel.
+- **Dashboard** — per-currency net worth, separate Bank Balance cards, asset
+  allocation, assets vs. liabilities, liability breakdown, metals breakdown,
+  budget usage, and quick-access tiles.
+- **Administration** — user CRUD and an application-health page showing
+  database size, record counts, audit log, and server log.
 - **Profile** — username, role, status, creation date, last login, and a
   change-password entry point.
 
-### Fixed deposit and recurring deposit maturity math
+### Fixed and recurring deposit maturity math
 
 Both listings compute tenure, interest, and approximate maturity server-side
-in `app.py` via two helpers:
-
-```python
-_fd_metrics(row)   # fixed deposits
-_rd_metrics(row)   # recurring deposits
-```
+in `app.py` via `_fd_metrics()` and `_rd_metrics()`.
 
 **Fixed deposits** use quarterly compounding:
 
 ```
 A = P × (1 + r/4)^(4·t)
 ```
-
-where `P` is the initial deposit, `r` the annual rate as a decimal, and `t`
-the tenure in years.
 
 **Recurring deposits** use the ordinary-annuity-due future value with monthly
 compounding:
@@ -334,320 +233,142 @@ compounding:
 M = P × (((1+i)^n − 1) / i) × (1+i)
 ```
 
-where `P` is the monthly deposit, `i = r/12` the monthly rate, and `n` the
-number of instalments derived from the start and maturity dates.
+Both values are labelled **approx.** — actual bank figures can differ by
+0.5–2 % depending on the institution's day-count convention. The edit forms
+show a live preview that mirrors the server-side formula exactly.
 
-Both values are labelled **approx.** everywhere they appear — actual bank
-figures can differ by 0.5–2 % depending on the institution's day-count
-convention. The edit forms show a live preview that mirrors the server-side
-formula exactly, so the number displayed before saving matches the number on
-the listing page after saving.
+## Deploying on Oracle Cloud
 
-Tenure is rounded to whole months (using 30.4375 days per month) and displayed
-as `2y 6m` above 12 months.
+Oracle Cloud Infrastructure (OCI) offers an **Always Free** tier that
+includes the `VM.Standard.E2.1.Micro` shape (1/8 OCPU, 1 GB RAM) running
+Ubuntu, and the ARM-based `VM.Standard.A1.Flex` shape (up to 4 OCPUs, 24 GB
+RAM). Either is more than enough for this single-user app.
 
-## Deploying on a cloud Linux server
-
-The application ships as a localhost-only development server. A public
-deployment puts Nginx in front of it as a TLS-terminating reverse proxy, runs
-the app as an unprivileged systemd service bound to `127.0.0.1`, and never
-exposes port 5555 to the internet.
+### Overview
 
 ```text
 Browser ──HTTPS 443──> Nginx ──HTTP 127.0.0.1:5555──> Waitress (app.py)
 ```
 
-Tested on Ubuntu 24.04 LTS. Adjust package commands for other distributions.
+Nginx terminates TLS on the public side. The Flask app binds to loopback only
+and is never reachable directly from the internet.
 
-### Option 1: one-command provisioning with deploy.sh
+### Step 1 — Create the Oracle Cloud account and a compartment
 
-`deploy.sh` updates Ubuntu packages and performs the host-side deployment:
-required system packages, service account, virtual environment, `.env` with
-freshly generated keys, the systemd unit, Nginx, the firewall, and a TLS
-certificate. It supports a domain name or a public IPv4 address. DNS (when
-using a domain) and the cloud provider's network security group must be
-configured beforehand.
+1. Sign up at `https://cloud.oracle.com`. A credit card is required for
+   identity verification, but Always Free resources will not be charged.
+2. In the OCI Console, navigate to
+   **Identity & Security → Identity → Compartments**.
+3. Click **Create Compartment**. Name it e.g. `finance`, set parent to your
+   root tenancy, and click **Create Compartment**.
 
-Before running the script with a domain name, point its DNS A record at the
-server's public IPv4 address. Pass only the hostname to `--domain` (for
-example `finance.example.com`), not `https://` or a URL path. Also allow
-inbound SSH (22), HTTP (80), and HTTPS (443) in the cloud provider's network
-security group/security list. Port 80 is required for Let's Encrypt HTTP-01
-issuance and renewal. The script configures UFW, but it cannot configure the
-provider firewall or subnet route table.
+### Step 2 — Create the Ubuntu VM
 
-For local-folder deployment, create `/root/secure_finance_app` on the server
-and place the project files directly inside it. In particular, `app.py`,
-`requirements.txt`, and `deploy.sh` should be at
-`/root/secure_finance_app/`, not inside another nested project directory. The
-script copies that source folder to `/opt/finance/app` by default; use
-`--app-dir` to choose another runtime install location.
+1. Go to **Compute → Instances → Create instance**.
+2. **Name:** e.g. `finance-server`.
+3. **Compartment:** the one you just created.
+4. **Image:** click **Change image** and select **Canonical Ubuntu 22.04** or
+   **24.04**. Confirm the **Always Free** badge.
+5. **Shape:** select `VM.Standard.E2.1.Micro` (Always Free AMD) or
+   `VM.Standard.A1.Flex` (Always Free ARM) if available in your region.
+6. **Networking:** leave the default "Create new virtual cloud network" — OCI
+   provisions a VCN, public subnet, internet gateway, and route table for
+   you.
+7. **Add SSH keys:** select **Generate a key pair for me** and download the
+   private key. You will need it to connect.
+8. Click **Create**. Wait for the instance state to read **Running**.
+9. On the instance page, copy the **Public IP address** under
+   **Instance access**.
 
-```bash
-cd /root/secure_finance_app
-sudo ./deploy.sh --domain finance.example.com --email you@example.com
-```
+### Step 3 — Open the required ports in the Security List
 
-This domain-name form uses Let's Encrypt domain validation. The script
-configures Nginx for the hostname and adds it to `ALLOWED_HOSTS`. If rerun on
-an existing IP deployment, it preserves `.env` secrets and credentials while
-adding the new hostname, and enables secure session cookies for TLS.
+By default, OCI allows only SSH inbound. HTTP and HTTPS must be opened
+explicitly.
 
-Alternatively, let the script clone a Git repository URL. The repository root
-must contain `app.py` and `requirements.txt`; `deploy.sh` itself does not need
-to come from that repository:
+1. Go to **Networking → Virtual Cloud Networks** and click the VCN created
+   with your instance.
+2. Under **Resources**, click **Security Lists**, then the default security
+   list.
+3. Click **Add Ingress Rules** and add three rules with **Source Type: CIDR**
+   and **Source CIDR: `0.0.0.0/0`**:
 
-```bash
-sudo ./deploy.sh \
-    --domain finance.example.com \
-    --repo-url https://github.com/your-account/your-repository.git \
-    --branch main \
-    --email you@example.com
-```
+   | Stateless | IP Protocol | Destination Port | Description |
+   | --------- | ----------- | ---------------- | ----------- |
+   | No        | TCP         | `22`             | SSH         |
+   | No        | TCP         | `80`             | HTTP        |
+   | No        | TCP         | `443`            | HTTPS       |
 
-Omit `--branch` to use the repository's default branch. For a private
-repository, configure a deploy key or other Git authentication for the root
-account running the script. Do not put access tokens or passwords in the
-repository URL or shell history.
+   Port 80 is required for Let's Encrypt HTTP-01 issuance and renewal. Port
+   443 serves the encrypted site.
 
-For IP-only access with browser-trusted TLS, pass the server's public IPv4
-address instead. Allow inbound ports 80 and 443 in the cloud security group;
-port 80 is needed for certificate issuance and renewal. IP certificates use a
-short-lived profile and Certbot renews them automatically, so do not disable
-its renewal timer.
+4. Click **Add Ingress Rules**.
+
+### Step 4 — Connect to the instance
+
+From your local machine:
 
 ```bash
-sudo ./deploy.sh --domain 203.0.113.10 --email you@example.com
+chmod 400 ~/Downloads/ssh-key-*.key
+ssh -i ~/Downloads/ssh-key-*.key ubuntu@<YOUR_INSTANCE_PUBLIC_IP>
 ```
 
-Options:
+The default user on an Ubuntu OCI image is `ubuntu`.
 
-- `--domain <fqdn-or-ipv4>`: Required. Public hostname or IPv4 served over
-  HTTPS.
-- `--email <address>`: Contact address for Let's Encrypt registration.
-- `--repo-url <url>`: Clone source from a Git repository instead of using
-  files beside `deploy.sh`.
-- `--branch <name>`: Branch to clone; requires `--repo-url`, otherwise the
-  default branch is used.
-- `--no-tls`: Skip certbot and serve plain HTTP on port 80.
-- `--no-firewall`: Skip UFW configuration.
-- `--port <number>`: Loopback port for the application, default 5555.
-- `--app-dir <path>`: Install location, default `/opt/finance/app`.
-
-On success the script prints the site URL and a randomly generated
-first-login password, shown once. Sign in as `admin` and change it
-immediately.
-
-The script is idempotent. Re-running it upgrades dependencies and rewrites
-the service and Nginx configuration, but never overwrites an existing `.env`
-or database. To publish code changes, either copy updated project files
-directly into `/root/secure_finance_app` and rerun
-`sudo ./deploy.sh --domain <your-domain-or-public-ip>`, or rerun with
-`--repo-url <git-url>` and optionally `--branch <name>`. Both modes copy the
-source to `/opt/finance/app` and restart the service. The base template
-versions the stylesheet URL to avoid stale browser CSS; the template itself
-still requires redeployment.
-
-### Option 2: provisioning on Oracle Cloud with Terraform
-
-For a fully automated Oracle Cloud Infrastructure (OCI) deployment — VCN,
-subnet, security list, Ubuntu 22.04 instance, cloud-init that installs Nginx
-and Certbot, clones the repository, creates the systemd unit, and requests a
-Let's Encrypt certificate — use the Terraform configuration in
-`terraform/`. It provisions an Always Free `VM.Standard.E2.1.Micro` shape by
-default and opens ports 22, 80, and 443.
-
-Minimal flow:
-
-```bash
-cd terraform
-terraform init
-terraform plan
-terraform apply
-```
-
-Required variables are documented in `terraform/variables.tf`. After `apply`,
-`terraform output public_ip` returns the address. SSH to it with
-`ssh ubuntu@<ip>` and follow progress in `/var/log/cloud-init-output.log`.
-
-A cloud-init-driven first boot handles the entire install: system update,
-Python virtualenv, dependencies, repo clone, database init, systemd unit,
-Nginx reverse proxy, UFW, and a Certbot HTTP-01 challenge for the domain
-supplied via `domain_name`.
-
-### Free domain with DuckDNS
-
-Oracle Cloud's public IP cannot receive a Let's Encrypt certificate directly
-— Let's Encrypt only issues for domain names. DuckDNS provides a free
-subdomain that solves this:
-
-1. Sign in at `https://www.duckdns.org` and create a subdomain, e.g.
-   `yourname` → `yourname.duckdns.org`.
-2. Enter the server's public IPv4 address in the "current ip" field and click
-   **update ip**.
-3. Verify with `nslookup yourname.duckdns.org`.
-4. Pass the full subdomain as `domain_name` to Terraform, or use it with
-   `deploy.sh --domain yourname.duckdns.org`.
-
-DuckDNS also supports a cron-based IP updater:
-
-```bash
-*/5 * * * * curl -s "https://www.duckdns.org/update?domains=yourname&token=YOUR-TOKEN&ip=" > /dev/null
-```
-
-Oracle Cloud instances keep their public IP for the lifetime of the instance
-unless released, so frequent updates are rarely needed.
-
-### Deployment troubleshooting
-
-#### IP-address TLS validation
-
-For browser-trusted TLS using a public IPv4 address, use the one-command
-`deploy.sh` flow. It requests a short-lived IP certificate with Certbot's
-`shortlived` profile. Keep Certbot's renewal timer enabled and allow public
-inbound TCP 80 and 443 in the cloud firewall; TCP 22 is needed for SSH. A
-domain-based certificate requires the domain's A record to point at the
-server.
-
-Test the challenge webroot locally and from a different machine before
-retrying Certbot:
-
-```bash
-sudo install -d -m 755 /var/www/letsencrypt/.well-known/acme-challenge
-printf 'probe\n' | sudo tee /var/www/letsencrypt/.well-known/acme-challenge/probe >/dev/null
-sudo chmod 644 /var/www/letsencrypt/.well-known/acme-challenge/probe
-curl -i -H 'Host: 203.0.113.10' http://127.0.0.1/.well-known/acme-challenge/probe
-curl -i http://203.0.113.10/.well-known/acme-challenge/probe
-```
-
-Replace `203.0.113.10` with the server's public IP. Both requests must return
-`200` and `probe`. A local `403` means Nginx cannot read or traverse the
-challenge path; the current `deploy.sh` sets those permissions and runs
-Certbot with a webroot-specific `umask 022`. If local access succeeds but
-external access cannot connect, inspect the cloud ingress rules, public
-subnet route to an Internet Gateway, and host packet-filter rules.
-`ufw status` alone may not show an earlier firewall rule that takes
-precedence.
-
-On Ubuntu cloud images, inspect packet arrival and INPUT rule ordering with:
-
-```bash
-sudo tcpdump -nni any 'tcp port 80'
-sudo iptables -nvL INPUT --line-numbers
-```
-
-If a catch-all `REJECT` appears before the UFW rules, UFW's later port-80
-allow does not take effect. In the observed OCI image, the early reject
-followed the SSH allow; after confirming that same ordering, these temporary
-runtime rules allowed the ACME request and HTTPS traffic:
-
-```bash
-sudo iptables -I INPUT 5 -p tcp --dport 80 -m conntrack --ctstate NEW -j ACCEPT
-sudo iptables -I INPUT 6 -p tcp --dport 443 -m conntrack --ctstate NEW -j ACCEPT
-```
-
-These rules do not survive reboot. Correct the persistent firewall
-configuration that installs the early reject; do not save rules blindly if
-another firewall manager owns them. A TCP SYN visible in `tcpdump` without a
-SYN-ACK indicates the block is at the host firewall; no SYN indicates an
-upstream network rule or route problem.
-
-### Configuration used by a public deployment
-
-Four settings in `.env` switch the application from local-only to server
-mode. `deploy.sh` writes them for you; set them by hand if you deploy
-manually.
-
-| Setting                  | Local default         | Server value | Purpose                                              |
-| ------------------------ | --------------------- | ------------ | ---------------------------------------------------- |
-| `ALLOWED_HOSTS`          | `localhost,127.0.0.1` | your domain  | `security_gate` returns HTTP 400 for any other host  |
-| `SESSION_COOKIE_SECURE`  | `false`               | `true`       | Restricts the session cookie to HTTPS                |
-| `TRUSTED_PROXY_COUNT`    | `0`                   | `1`          | Number of proxies whose `X-Forwarded-For` is trusted |
-| `BIND_HOST`, `BIND_PORT` | `127.0.0.1`, `5555`   | unchanged    | Loopback bind address for Waitress                   |
-
-`TRUSTED_PROXY_COUNT` matters for security. Login throttling, account
-lockout, and the audit log all record `request.remote_addr`. Behind Nginx,
-every request would otherwise appear to come from `127.0.0.1`, letting a
-single attacker exhaust the shared rate limit and making audit entries
-useless. Set it to the exact number of proxies you control; a larger value
-lets clients spoof their address through a forged header.
-
-### Option 3: manual provisioning
-
-#### 1. Provision and harden the server
-
-Create a small VM (1 vCPU, 1 GB RAM is sufficient) and keep SSH key-only.
+### Step 5 — Install system dependencies
 
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y python3-venv python3-pip nginx git ufw
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-sudo ufw allow OpenSSH
-sudo ufw allow 'Nginx Full'
-sudo ufw enable
+sudo apt install -y python3-venv python3-pip nginx git certbot python3-certbot-nginx ufw fail2ban
 ```
 
-Port 5555 is deliberately absent; the app is reachable only through Nginx. In
-your cloud provider's network security group, allow **22**, **80**, and
-**443**; port 80 is required by the HTTP-01 certificate challenge.
+This installs Python, Nginx, Certbot, UFW, and Fail2ban.
 
-#### 2. Create a dedicated service account
-
-Never run the application as root or as your login user.
+### Step 6 — Clone the repository and set up the app
 
 ```bash
-sudo useradd --system --create-home --home-dir /opt/finance --shell /usr/sbin/nologin finance
-sudo -u finance git clone <your-repository-url> /opt/finance/app
-```
-
-#### 3. Install dependencies
-
-```bash
-sudo -u finance python3 -m venv /opt/finance/app/.venv
-sudo -u finance /opt/finance/app/.venv/bin/pip install --upgrade pip
-sudo -u finance /opt/finance/app/.venv/bin/pip install -r /opt/finance/app/requirements.txt
-```
-
-#### 4. Create `.env` and the database
-
-Generate fresh keys on the server. Do not copy development keys into
-production.
-
-```bash
+sudo mkdir -p /opt/finance
+sudo chown ubuntu:ubuntu /opt/finance
+git clone <YOUR_GITHUB_REPO_URL> /opt/finance/app
 cd /opt/finance/app
-sudo -u finance bash -c 'umask 077; .venv/bin/python - <<PY
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Generate the `.env` with fresh secrets. **Do not copy development keys into
+production:**
+
+```bash
+python3 - <<'PY'
 from pathlib import Path
 from cryptography.fernet import Fernet
 import secrets
-Path(".env").write_text(
-    "SECRET_KEY=" + secrets.token_urlsafe(64) + "\n"
-    "DATA_KEY=" + Fernet.generate_key().decode() + "\n"
-    "DEFAULT_USER=admin\n"
-    "DEFAULT_PASSWORD=" + secrets.token_urlsafe(18) + "\n"
-    "ALLOWED_HOSTS=finance.example.com\n"
-    "SESSION_COOKIE_SECURE=true\n"
-    "TRUSTED_PROXY_COUNT=1\n", encoding="utf-8")
-PY'
-sudo -u finance mkdir -p instance
-sudo chmod 700 /opt/finance/app/instance
-sudo chmod 600 /opt/finance/app/.env
+Path('.env').write_text(
+    'SECRET_KEY=' + secrets.token_urlsafe(64) + '\n'
+    'DATA_KEY=' + Fernet.generate_key().decode() + '\n'
+    'DEFAULT_USER=admin\n'
+    'DEFAULT_PASSWORD=' + secrets.token_urlsafe(18) + '\n'
+    'ALLOWED_HOSTS=yourdomain.duckdns.org\n'
+    'SESSION_COOKIE_SECURE=true\n'
+    'TRUSTED_PROXY_COUNT=1\n'
+    'BIND_HOST=127.0.0.1\n'
+    'BIND_PORT=5555\n', encoding='utf-8')
+PY
+chmod 600 .env
 ```
 
-Read the generated default password once, then sign in and change it:
+Replace `yourdomain.duckdns.org` with your actual domain (from Step 10). If
+you want to test with the IP first, set `ALLOWED_HOSTS=<PUBLIC_IP>` and
+`SESSION_COOKIE_SECURE=false` temporarily.
+
+Read the generated password once:
 
 ```bash
-sudo grep DEFAULT_PASSWORD /opt/finance/app/.env
+grep '^DEFAULT_PASSWORD=' .env
 ```
 
-The startup banner in the systemd journal also prints the credentials once
-per launch:
-
-```bash
-sudo journalctl -u finance -n 40 --no-pager
-```
-
-#### 5. Create the systemd service
+### Step 7 — Create the systemd service
 
 ```bash
 sudo tee /etc/systemd/system/finance.service >/dev/null <<'EOF'
@@ -657,8 +378,8 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=finance
-Group=finance
+User=ubuntu
+Group=ubuntu
 WorkingDirectory=/opt/finance/app
 ExecStart=/opt/finance/app/.venv/bin/python app.py
 Restart=on-failure
@@ -688,32 +409,25 @@ sudo systemctl enable --now finance
 sudo systemctl status finance --no-pager
 ```
 
-`ProtectSystem=strict` makes the whole filesystem read-only except
-`ReadWritePaths`, so the service can write only its SQLite database. The
-`app.py` entrypoint already calls `init_db()` and binds Waitress to
-`127.0.0.1:5555`.
+Check the startup banner for credentials and DB path:
 
-#### 6. Configure Nginx
+```bash
+sudo journalctl -u finance -n 40 --no-pager
+```
+
+### Step 8 — Configure Nginx as a reverse proxy
 
 ```bash
 sudo tee /etc/nginx/sites-available/finance >/dev/null <<'EOF'
 server {
     listen 80;
-    server_name finance.example.com;
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name finance.example.com;
-
-    # Certificate paths are filled in by certbot.
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers off;
-
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    server_name yourdomain.duckdns.org;
 
     client_max_body_size 1m;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:5555;
@@ -728,89 +442,229 @@ EOF
 
 sudo ln -sf /etc/nginx/sites-available/finance /etc/nginx/sites-enabled/finance
 sudo rm -f /etc/nginx/sites-enabled/default
+sudo mkdir -p /var/www/letsencrypt
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-`proxy_set_header Host $host` is what makes the `ALLOWED_HOSTS` check see
-your real domain. `client_max_body_size 1m` complements the application's own
-`MAX_CONTENT_LENGTH` of 256 KB.
-
-The application already sends its own CSP, `X-Frame-Options`,
-`Referrer-Policy`, and `Cache-Control: no-store` headers, so do not duplicate
-them in Nginx. HSTS is added here because it belongs at the TLS edge.
-
-#### 7. Issue a TLS certificate
-
-Point an A record at the server's public IP first, then:
+### Step 9 — Configure the host firewall
 
 ```bash
-sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d finance.example.com
-sudo systemctl list-timers | grep certbot
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+sudo ufw --force enable
+sudo ufw status verbose
 ```
 
-Certbot rewrites the server block with the certificate paths and installs a
-renewal timer.
+Do not open port 5555. The app is reachable only through Nginx on loopback.
 
-### Verify the deployment
+### Step 10 — Point a free domain at the server
+
+Let's Encrypt only issues certificates for domain names (IP certificates use
+a separate 6-day profile that is fragile for production). The simplest free
+option is **DuckDNS**.
+
+1. Go to `https://www.duckdns.org` and sign in with Google, GitHub, or X.
+2. In the **sub domain** field, enter a unique name (e.g. `myfinance`). Your
+   domain becomes `myfinance.duckdns.org`.
+3. In the **current ip** field, paste your OCI instance's public IP.
+4. Click **update ip**.
+5. Copy your **token** from the DuckDNS dashboard in case you want automatic
+   IP updates later.
+6. Verify from your local machine:
+
+   ```bash
+   nslookup myfinance.duckdns.org
+   ```
+
+   It should return your OCI public IP.
+
+7. Update `.env` on the server so `ALLOWED_HOSTS` matches:
+
+   ```bash
+   sed -i 's/^ALLOWED_HOSTS=.*/ALLOWED_HOSTS=myfinance.duckdns.org/' /opt/finance/app/.env
+   sudo systemctl restart finance
+   ```
+
+8. Update the Nginx config:
+
+   ```bash
+   sudo sed -i 's/yourdomain.duckdns.org/myfinance.duckdns.org/g' /etc/nginx/sites-available/finance
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+**Optional — automatic IP updates.** OCI instances keep their public IP for
+the lifetime of the instance unless released, so frequent updates are rarely
+needed. If you want one anyway, add a cron job on the server:
 
 ```bash
-curl -I https://finance.example.com/login
+(crontab -l 2>/dev/null; echo '*/5 * * * * curl -s "https://www.duckdns.org/update?domains=myfinance&token=YOUR-TOKEN&ip=" > /dev/null') | crontab -
+```
+
+**Other free domain options:**
+
+- **sslip.io** or **nip.io** — zero configuration. If your IP is
+  `203.0.113.10`, you can immediately access the site at
+  `https://203.0.113.10.sslip.io` without any signup or DNS records.
+- **DigitalPlat** — free domains with TLDs like `.dpdns.org` or `.qzz.io`.
+  Register the domain, point it at Cloudflare for DNS management, and get a
+  free SSL certificate through Cloudflare's free plan.
+- **Cloudflare + any registrar** — if you own a domain (from Namecheap,
+  Porkbun, etc.), move its nameservers to Cloudflare, then create an **A
+  record** pointing the subdomain at your OCI public IP. Cloudflare's free
+  plan includes DNS management, DDoS protection, and a free SSL certificate.
+
+### Step 11 — Obtain a free TLS certificate
+
+With the domain resolving to your server, Certbot can complete the HTTP-01
+challenge:
+
+```bash
+sudo certbot --nginx -d myfinance.duckdns.org \
+    --non-interactive --agree-tos -m you@example.com --redirect
+```
+
+Certbot rewrites the Nginx server block with the certificate paths and adds
+an HTTPS redirect. Verify the renewal timer:
+
+```bash
+systemctl list-timers | grep certbot
+sudo certbot renew --dry-run
+```
+
+### Step 12 — Verify the deployment
+
+```bash
+# Public site should return 200 or 302
+curl -I https://myfinance.duckdns.org/login
+
+# App should only be listening on loopback
 sudo ss -tlnp | grep 5555
+
+# Session cookie must be hardened
+curl -sI https://myfinance.duckdns.org/login | grep -i set-cookie
 ```
 
-Expect a `302` or `200` from the first command, and the second must show
-`127.0.0.1:5555` only, never `0.0.0.0:5555`. Confirm the session cookie is
-hardened:
+The `set-cookie` line must include `Secure`, `HttpOnly`, and
+`SameSite=Strict`. From another machine, `curl http://<public-ip>:5555` must
+fail to connect.
+
+Visit `https://myfinance.duckdns.org` and sign in with the password from
+Step 6. You will be prompted to change it on first login.
+
+### Operating the deployment
 
 ```bash
-curl -sI https://finance.example.com/login | grep -i set-cookie
-```
-
-It must include `Secure`, `HttpOnly`, and `SameSite=Strict`. From another
-machine, `curl http://<server-ip>:5555` must fail to connect.
-
-### Operate
-
-```bash
+# Restart the app
 sudo systemctl restart finance
+
+# Follow the application log
 sudo journalctl -u finance -f
+
+# Reload Nginx after config changes
+sudo nginx -t && sudo systemctl reload nginx
+
+# Deploy code updates
+cd /opt/finance/app
+git pull
+source .venv/bin/activate
+pip install -r requirements.txt
+sudo systemctl restart finance
 ```
 
-Back up `.env` and the database together, with the service stopped so
-SQLite's WAL is checkpointed:
+### Backing up
+
+Back up `.env` and the database together, with the service stopped so SQLite
+checkpoints its WAL:
 
 ```bash
 sudo systemctl stop finance
-sudo tar czf /root/finance-$(date +%F).tar.gz -C /opt/finance/app .env instance/finance.db
+sudo tar czf ~/finance-$(date +%F).tar.gz -C /opt/finance/app .env instance/finance.db
 sudo systemctl start finance
 ```
 
 Store backups off the server and encrypted. Anyone holding `.env` and the
 database has full access to your financial records.
 
-To deploy updates:
+### Deployment troubleshooting
+
+**Site unreachable after opening ports.** OCI's Security List is only half
+the firewall. Confirm UFW is not blocking:
 
 ```bash
-cd /opt/finance/app
-sudo -u finance git pull
-sudo -u finance .venv/bin/pip install -r requirements.txt
-sudo systemctl restart finance
+sudo ufw status verbose
 ```
 
-Or re-run the provisioning script from an updated working copy, which keeps
-`.env` and the database intact:
+If the app is not listening on `127.0.0.1:5555`, check
+`sudo journalctl -u finance -n 60 --no-pager`.
+
+**Certbot fails the HTTP-01 challenge.** Test the webroot locally and from
+another machine:
 
 ```bash
-sudo ./deploy.sh --domain finance.example.com
+sudo mkdir -p /var/www/letsencrypt/.well-known/acme-challenge
+printf 'probe\n' | sudo tee /var/www/letsencrypt/.well-known/acme-challenge/probe
+sudo chmod -R 755 /var/www/letsencrypt
+
+curl -i -H 'Host: myfinance.duckdns.org' http://127.0.0.1/.well-known/acme-challenge/probe
+curl -i http://myfinance.duckdns.org/.well-known/acme-challenge/probe
 ```
+
+Both must return `200` and `probe`. A local `403` means Nginx cannot read the
+challenge directory — verify permissions. A remote timeout means the Security
+List or UFW is still blocking port 80.
+
+**`ALLOWED_HOSTS` errors (HTTP 400).** Confirm the domain in `.env` matches
+what the browser is sending:
+
+```bash
+grep '^ALLOWED_HOSTS=' /opt/finance/app/.env
+```
+
+If you changed the domain, update `.env`, restart the service, and reload
+Nginx.
+
+**"Account is locked" or "Invalid username or password".** Five failed login
+attempts lock the account for 15 minutes. Clear the lock directly:
+
+```bash
+sqlite3 /opt/finance/app/instance/finance.db \
+  "UPDATE users SET failed=0, locked_until=NULL WHERE username='admin';"
+```
+
+**Stale browser cache after CSS changes.** The `base.html` template links
+the stylesheet with a version query parameter. Bump it in the template and
+push the update.
+
+**IP-address certificates.** Let's Encrypt now issues certificates for bare
+IP addresses using the `shortlived` profile (valid for 160 hours).
+Use `--preferred-profile shortlived` combined with `--ip-address <ip>` in
+Certbot. This is useful for testing without a domain, but for a persistent
+deployment a real domain is strongly preferred.
+
+### Configuration used by a public deployment
+
+Four settings in `.env` switch the application from local-only to server
+mode.
+
+| Setting                  | Local default         | Server value | Purpose                                              |
+| ------------------------ | --------------------- | ------------ | ---------------------------------------------------- |
+| `ALLOWED_HOSTS`          | `localhost,127.0.0.1` | your domain  | `security_gate` returns HTTP 400 for any other host  |
+| `SESSION_COOKIE_SECURE`  | `false`               | `true`       | Restricts the session cookie to HTTPS                |
+| `TRUSTED_PROXY_COUNT`    | `0`                   | `1`          | Number of proxies whose `X-Forwarded-For` is trusted |
+| `BIND_HOST`, `BIND_PORT` | `127.0.0.1`, `5555`   | unchanged    | Loopback bind address for Waitress                   |
+
+`TRUSTED_PROXY_COUNT` matters for security. Login throttling, account
+lockout, and the audit log all record `request.remote_addr`. Behind Nginx,
+every request would otherwise appear to come from `127.0.0.1`. Set it to the
+exact number of proxies you control.
 
 ### Deployment limitations
 
 - SQLite with a single Waitress process suits one user. Do not scale to
   multiple instances against the same database file.
-- `Flask-Limiter` uses in-memory storage, so rate limits reset on restart and
-  are not shared across processes.
+- `Flask-Limiter` uses in-memory storage, so rate limits reset on restart.
 - There is no built-in multi-tenancy; every account sees the same data set.
 - Keep the server patched and restrict SSH to keys and known source
   addresses.
@@ -824,50 +678,36 @@ sudo ./deploy.sh --domain finance.example.com
 ├── requirements.txt
 ├── setup.sh                     Local dev bootstrap
 ├── deploy.sh                    Ubuntu host-side provisioning
-├── terraform/                   Oracle Cloud provisioning (optional)
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── versions.tf
-│   └── cloud-init.yaml.tpl
 ├── templates/
 │   ├── base.html                Shared shell (sidebar, topbar, footer)
 │   ├── _summary_card.html       Shared macro for section summary cards
-│   ├── _form_header.html        Shared header for edit forms
 │   ├── dashboard.html
-│   ├── bank_accounts.html
-│   ├── bank_account_edit.html
-│   ├── fixed_deposits.html
-│   ├── fixed_deposit_edit.html
-│   ├── recurring_deposits.html
-│   ├── recurring_deposit_edit.html
+│   ├── bank_accounts.html / bank_account_edit.html
+│   ├── fixed_deposits.html / fixed_deposit_edit.html
+│   ├── recurring_deposits.html / recurring_deposit_edit.html
 │   ├── stocks.html / stock_edit.html
 │   ├── esops.html / esop_edit.html
 │   ├── mutual_funds.html / mutual_fund_edit.html
 │   ├── metals.html / metal_edit.html
 │   ├── liabilities.html / liability_edit.html
 │   ├── retirals.html / retiral_edit.html
-│   ├── admin.html               User management
-│   ├── admin_health.html        Application health
+│   ├── budgets.html / budget_edit.html
+│   ├── admin.html / admin_health.html
 │   ├── user_profile.html
-│   ├── login.html
-│   ├── change_password.html
+│   ├── login.html / change_password.html
 │   └── error.html
 └── static/
     ├── style.css                Global theme and layout
     ├── admin.css                Admin + health page styles
-    ├── portfolio_summary.css    Section summary cards and table variants
+    ├── portfolio_summary.css    Section summary cards and tables
     ├── record_actions.css       Edit/Delete button styles
-    ├── liabilities.css
-    ├── metals.css
-    ├── profile.css
-    ├── dashboard_charts.css
-    ├── fixed_deposit.css
-    ├── app.js                   Sidebar toggle, form helpers
-    ├── admin.js                 Delete confirmation, reset popover
-    ├── charts.js                Dashboard chart rendering
-    ├── form.js / esops.js / stocks.js
-    ├── mutual_funds.js / metals.js
-    ├── recurring_deposits.js / retirals.js
+    ├── budgets.css              Budget tracker styles
+    ├── liabilities.css / metals.css / profile.css
+    ├── dashboard_charts.css / fixed_deposit.css
+    ├── app.js / admin.js / charts.js
+    ├── stock_edit.js            Market toggle + live stock calculations
+    ├── form.js / esops.js / mutual_funds.js
+    ├── metals.js / recurring_deposits.js / retirals.js
     ├── liabilities.js
     └── favicon.svg
 ```
@@ -880,11 +720,17 @@ rotation, strict host validation, secure response headers, idle session
 expiration, request limits, audit logging, and localhost-only Waitress
 binding.
 
+On the server side, the deployment guide configures:
+
+- Security List ingress restricted to TCP 22, 80, and 443 only.
+- UFW denying all inbound except SSH and Nginx Full.
+- systemd hardening (`NoNewPrivileges`, `ProtectSystem=strict`,
+  `PrivateTmp`, `MemoryDenyWriteExecute`).
+- Fail2ban for SSH brute-force protection.
+- Let's Encrypt TLS with automatic renewal.
+
 Back up `.env` together with `instance/finance.db`; neither is usable without
-the other. Existing databases from earlier prototypes should be backed up
-before copying them into this package. See
-[Files excluded from version control](#files-excluded-from-version-control)
-for what a fresh clone is missing and how to recreate it.
+the other.
 
 ## License
 

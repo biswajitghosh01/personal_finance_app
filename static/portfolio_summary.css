@@ -1,867 +1,4 @@
 /* =========================================================
-   SECTION SUMMARY CARDS + MUTUAL FUNDS TABLE
-   ========================================================= */
-
-/* ---------------- Summary cards ---------------- */
-
-.summary-cards,
-.portfolio-summary-grid,
-.metal-summary-grid,
-.liability-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 18px;
-  margin: 0 0 26px;
-}
-
-.summary-card,
-.portfolio-summary-card,
-.metal-summary-card,
-.liability-summary-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 22px 24px 20px;
-  border-radius: var(--radius-lg);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 40%),
-    linear-gradient(145deg, var(--panel), var(--panel-2));
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-  min-width: 0;
-}
-
-.summary-card::before,
-.portfolio-summary-card::before,
-.metal-summary-card::before,
-.liability-summary-card::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 20px;
-  bottom: 20px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--cyan);
-}
-
-.summary-card.accent-green::before {
-  background: var(--green);
-}
-.summary-card.accent-pink::before {
-  background: var(--pink);
-}
-.summary-card.accent-gold::before {
-  background: var(--gold);
-}
-.summary-card.accent-violet::before {
-  background: #a99ee8;
-}
-
-.summary-card::after {
-  content: "";
-  position: absolute;
-  right: -60px;
-  top: -60px;
-  width: 180px;
-  height: 180px;
-  border-radius: 50%;
-  background: radial-gradient(circle, var(--cyan-soft), transparent 70%);
-  pointer-events: none;
-  opacity: 0.8;
-}
-
-.summary-card.accent-green::after {
-  background: radial-gradient(circle, var(--green-soft), transparent 70%);
-}
-.summary-card.accent-pink::after {
-  background: radial-gradient(circle, var(--pink-soft), transparent 70%);
-}
-.summary-card.accent-gold::after {
-  background: radial-gradient(circle, var(--gold-soft), transparent 70%);
-}
-
-.summary-head,
-.portfolio-summary-head,
-.metal-summary-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.summary-head .kpi-label,
-.portfolio-summary-head .kpi-label,
-.metal-summary-head .kpi-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--muted);
-  display: block;
-  margin-bottom: 6px;
-}
-
-.summary-total,
-.portfolio-summary-total,
-.metal-summary-total {
-  display: block;
-  font-size: clamp(22px, 2.6vw, 30px);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-  color: var(--cyan-bright);
-  overflow-wrap: anywhere;
-  margin-top: 6px;
-}
-
-.summary-card.accent-green .summary-total {
-  color: #7ed6b6;
-}
-.summary-card.accent-pink .summary-total {
-  color: #ff92aa;
-}
-.summary-card.accent-gold .summary-total {
-  color: #e8c985;
-}
-.summary-card.accent-violet .summary-total {
-  color: #c3bcf0;
-}
-
-.summary-currency,
-.metal-currency-pill,
-.metal-record-count,
-.currency-pill,
-.record-count {
-  display: inline-flex;
-  align-items: center;
-  padding: 5px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  flex-shrink: 0;
-}
-
-.summary-metrics,
-.portfolio-summary-metrics,
-.metal-summary-metrics {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.summary-metrics > div,
-.portfolio-summary-metrics > div,
-.metal-summary-metrics > div {
-  min-width: 0;
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid var(--line-soft);
-}
-
-.summary-metrics small,
-.portfolio-summary-metrics small,
-.metal-summary-metrics small {
-  display: block;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 4px;
-}
-
-.summary-metrics strong,
-.portfolio-summary-metrics strong,
-.metal-summary-metrics strong {
-  display: block;
-  font-size: 13.5px;
-  font-weight: 650;
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-
-.summary-metrics strong.positive,
-.portfolio-summary-metrics strong.positive,
-.metal-summary-metrics strong.positive {
-  color: var(--green);
-}
-
-.summary-metrics strong.negative,
-.portfolio-summary-metrics strong.negative,
-.metal-summary-metrics strong.negative {
-  color: var(--pink);
-}
-
-.summary-progress {
-  --pct: 0%;
-  margin-top: 2px;
-}
-
-.summary-progress-label {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  color: var(--muted);
-  margin-bottom: 6px;
-}
-
-.summary-progress-track {
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  overflow: hidden;
-}
-
-.summary-progress-fill {
-  height: 100%;
-  width: var(--pct);
-  background: linear-gradient(90deg, var(--cyan), var(--cyan-bright));
-  border-radius: inherit;
-  transition: width 0.5s var(--ease);
-}
-
-.summary-card.accent-green .summary-progress-fill {
-  background: linear-gradient(90deg, #3f8a72, var(--green));
-}
-.summary-card.accent-pink .summary-progress-fill {
-  background: linear-gradient(90deg, #a84e66, var(--pink));
-}
-.summary-card.accent-gold .summary-progress-fill {
-  background: linear-gradient(90deg, #a88a4a, var(--gold));
-}
-
-.summary-empty,
-.portfolio-empty-summary,
-.metal-empty-summary {
-  padding: 28px 24px;
-  border-radius: var(--radius-lg);
-  border: 1px dashed var(--line);
-  background: rgba(255, 255, 255, 0.015);
-  text-align: center;
-  margin-bottom: 24px;
-}
-
-.summary-empty strong,
-.portfolio-empty-summary strong,
-.metal-empty-summary strong {
-  display: block;
-  color: #fff;
-  font-size: 15px;
-  margin-bottom: 6px;
-}
-
-.summary-empty p,
-.portfolio-empty-summary p,
-.metal-empty-summary p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-/* ---------------- Mutual Funds table ---------------- */
-
-.mf-table {
-  table-layout: fixed;
-  width: 100%;
-  min-width: 900px;
-}
-
-.mf-table col.col-id {
-  width: 5%;
-}
-.mf-table col.col-house {
-  width: 14%;
-}
-.mf-table col.col-name {
-  width: 22%;
-}
-.mf-table col.col-type {
-  width: 9%;
-}
-.mf-table col.col-money {
-  width: 11%;
-}
-.mf-table col.col-pct {
-  width: 7%;
-}
-.mf-table col.col-actions {
-  width: 10%;
-}
-
-/* Fund name wraps instead of pushing the money columns narrow */
-.mf-table .mf-name strong {
-  display: block;
-  white-space: normal;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  line-height: 1.3;
-}
-
-.mf-table .mf-house {
-  white-space: normal;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  line-height: 1.3;
-}
-
-/* Money columns: equal width, right-aligned, tabular figures */
-.mf-table th.mf-money,
-.mf-table td.mf-money {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.mf-table th.mf-pct,
-.mf-table td.mf-pct {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* ---------------- Mutual Funds — action buttons ---------------- */
-
-/* Force Edit and Delete to sit side by side, at every viewport */
-.mf-table td.mf-actions {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  flex-wrap: nowrap;
-  gap: 8px;
-  white-space: nowrap;
-  padding-right: 12px;
-}
-
-/* The Delete button lives inside a <form>. Make the form itself
-   an inline-flex so it participates in the parent's row layout. */
-.mf-table td.mf-actions .mf-actions-form {
-  display: inline-flex;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  background: none;
-  border: 0;
-}
-
-/* Prevent the buttons from wrapping internally */
-.mf-table td.mf-actions .icon-button {
-  white-space: nowrap;
-  flex: 0 0 auto;
-}
-
-/* ---------------- Responsive ---------------- */
-
-@media (max-width: 1100px) {
-  .mf-table col.col-house {
-    width: 12%;
-  }
-  .mf-table col.col-name {
-    width: 20%;
-  }
-  .mf-table col.col-money {
-    width: 12%;
-  }
-  .mf-table col.col-actions {
-    width: 12%;
-  }
-}
-
-@media (max-width: 900px) {
-  .mf-table col.col-id,
-  .mf-table col.col-type {
-    display: none;
-  }
-
-  .mf-table col.col-house {
-    width: 22%;
-  }
-  .mf-table col.col-name {
-    width: 32%;
-  }
-  .mf-table col.col-money {
-    width: 15%;
-  }
-  .mf-table col.col-pct {
-    width: 10%;
-  }
-  .mf-table col.col-actions {
-    width: 21%;
-  }
-}
-
-/* Override the generic mobile rule that stacks action buttons
-   inside any .action-buttons container — the MF table opts out. */
-@media (max-width: 660px) {
-  .mf-table td.mf-actions {
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .mf-table td.mf-actions .icon-button {
-    width: auto;
-    min-width: 0;
-  }
-
-  .summary-cards,
-  .portfolio-summary-grid,
-  .metal-summary-grid,
-  .liability-summary-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .summary-card,
-  .portfolio-summary-card,
-  .metal-summary-card,
-  .liability-summary-card {
-    padding: 18px 18px 16px;
-  }
-
-  .summary-metrics,
-  .portfolio-summary-metrics,
-  .metal-summary-metrics {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* =========================================================
-   Fixed Deposits table
-   ========================================================= */
-
-.fd-table {
-  table-layout: fixed;
-  width: 100%;
-  min-width: 1080px;
-}
-
-.fd-table col.col-id {
-  width: 5%;
-}
-.fd-table col.col-bank {
-  width: 15%;
-}
-.fd-table col.col-money {
-  width: 12%;
-} /* principal, interest, maturity */
-.fd-table col.col-rate {
-  width: 6%;
-}
-.fd-table col.col-tenure {
-  width: 8%;
-}
-.fd-table col.col-date {
-  width: 9%;
-}
-.fd-table col.col-actions {
-  width: 11%;
-}
-
-.fd-table th.fd-money,
-.fd-table td.fd-money {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.fd-table th.fd-rate,
-.fd-table td.fd-rate,
-.fd-table th.fd-tenure,
-.fd-table td.fd-tenure,
-.fd-table th.fd-date,
-.fd-table td.fd-date {
-  text-align: right;
-  white-space: nowrap;
-}
-
-.fd-table .fd-bank {
-  white-space: normal;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  line-height: 1.3;
-}
-
-.fd-table td.fd-actions {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  flex-wrap: nowrap;
-  gap: 8px;
-  white-space: nowrap;
-  padding-right: 12px;
-}
-
-.fd-table td.fd-actions .fd-actions-form {
-  display: inline-flex;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  background: none;
-  border: 0;
-}
-
-.fd-table td.fd-actions .icon-button {
-  white-space: nowrap;
-  flex: 0 0 auto;
-}
-
-/* =========================================================
-   Recurring Deposits table
-   ========================================================= */
-
-.rd-table {
-  table-layout: fixed;
-  width: 100%;
-  min-width: 1180px;
-}
-
-.rd-table col.col-id {
-  width: 5%;
-}
-.rd-table col.col-bank {
-  width: 14%;
-}
-.rd-table col.col-money {
-  width: 11%;
-} /* monthly, invested, interest, maturity */
-.rd-table col.col-rate {
-  width: 6%;
-}
-.rd-table col.col-tenure {
-  width: 8%;
-}
-.rd-table col.col-date {
-  width: 9%;
-}
-.rd-table col.col-actions {
-  width: 11%;
-}
-
-.rd-table th.rd-money,
-.rd-table td.rd-money {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.rd-table th.rd-rate,
-.rd-table td.rd-rate,
-.rd-table th.rd-tenure,
-.rd-table td.rd-tenure,
-.rd-table th.rd-date,
-.rd-table td.rd-date {
-  text-align: right;
-  white-space: nowrap;
-}
-
-.rd-table .rd-bank {
-  white-space: normal;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  line-height: 1.3;
-}
-
-.rd-table td.rd-actions {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  flex-wrap: nowrap;
-  gap: 8px;
-  white-space: nowrap;
-  padding-right: 12px;
-}
-
-.rd-table td.rd-actions .rd-actions-form {
-  display: inline-flex;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  background: none;
-  border: 0;
-}
-
-.rd-table td.rd-actions .icon-button {
-  white-space: nowrap;
-  flex: 0 0 auto;
-}
-
-/* =========================================================
-   Responsive — both tables
-   ========================================================= */
-
-@media (max-width: 1100px) {
-  .fd-table col.col-tenure {
-    width: 10%;
-  }
-  .fd-table col.col-date {
-    width: 10%;
-  }
-
-  .rd-table col.col-tenure {
-    width: 10%;
-  }
-  .rd-table col.col-date {
-    width: 10%;
-  }
-}
-
-@media (max-width: 900px) {
-  .fd-table col.col-id,
-  .fd-table col.col-tenure {
-    display: none;
-  }
-  .fd-table col.col-bank {
-    width: 26%;
-  }
-  .fd-table col.col-money {
-    width: 15%;
-  }
-  .fd-table col.col-rate {
-    width: 8%;
-  }
-  .fd-table col.col-date {
-    width: 12%;
-  }
-  .fd-table col.col-actions {
-    width: 15%;
-  }
-
-  .rd-table col.col-id,
-  .rd-table col.col-tenure {
-    display: none;
-  }
-  .rd-table col.col-bank {
-    width: 22%;
-  }
-  .rd-table col.col-money {
-    width: 13%;
-  }
-  .rd-table col.col-rate {
-    width: 8%;
-  }
-  .rd-table col.col-date {
-    width: 11%;
-  }
-  .rd-table col.col-actions {
-    width: 15%;
-  }
-}
-
-@media (max-width: 660px) {
-  .fd-table td.fd-actions,
-  .rd-table td.rd-actions {
-    flex-direction: row;
-    align-items: center;
-  }
-  .fd-table td.fd-actions .icon-button,
-  .rd-table td.rd-actions .icon-button {
-    width: auto;
-    min-width: 0;
-  }
-}
-
-/* =========================================================
-   Stocks table
-   ========================================================= */
-
-.stk-table {
-  table-layout: fixed;
-  width: 100%;
-  min-width: 1000px;
-}
-
-.stk-table col.col-name {
-  width: 22%;
-}
-.stk-table col.col-market {
-  width: 10%;
-}
-.stk-table col.col-lots {
-  width: 6%;
-}
-.stk-table col.col-money {
-  width: 12%;
-} /* cost, current, P&L */
-.stk-table col.col-pct {
-  width: 8%;
-}
-.stk-table col.col-actions {
-  width: 18%;
-}
-
-.stk-table th.stk-money,
-.stk-table td.stk-money,
-.stk-table th.stk-pct,
-.stk-table td.stk-pct,
-.stk-table th.stk-lots,
-.stk-table td.stk-lots,
-.stk-table th.stk-market,
-.stk-table td.stk-market {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.stk-table .stk-name {
-  white-space: normal;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  line-height: 1.3;
-}
-
-/* Edit and Delete side by side */
-.stk-table td.stk-actions {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  flex-wrap: nowrap;
-  gap: 8px;
-  white-space: nowrap;
-  padding-right: 12px;
-}
-
-.stk-table td.stk-actions .stk-actions-form {
-  display: inline-flex;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  background: none;
-  border: 0;
-}
-
-.stk-table td.stk-actions .icon-button {
-  white-space: nowrap;
-  flex: 0 0 auto;
-}
-
-/* =========================================================
-   ESOPs table
-   ========================================================= */
-
-.eso-table {
-  table-layout: fixed;
-  width: 100%;
-  min-width: 950px;
-}
-
-.eso-table col.col-company {
-  width: 22%;
-}
-.eso-table col.col-units {
-  width: 10%;
-}
-.eso-table col.col-money {
-  width: 14%;
-} /* grant, current, P&L */
-.eso-table col.col-pct {
-  width: 8%;
-}
-.eso-table col.col-actions {
-  width: 18%;
-}
-
-.eso-table th.eso-money,
-.eso-table td.eso-money,
-.eso-table th.eso-pct,
-.eso-table td.eso-pct,
-.eso-table th.eso-units,
-.eso-table td.eso-units {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.eso-table .eso-company {
-  white-space: normal;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  line-height: 1.3;
-}
-
-.eso-table td.eso-actions {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  flex-wrap: nowrap;
-  gap: 8px;
-  white-space: nowrap;
-  padding-right: 12px;
-}
-
-.eso-table td.eso-actions .eso-actions-form {
-  display: inline-flex;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  background: none;
-  border: 0;
-}
-
-.eso-table td.eso-actions .icon-button {
-  white-space: nowrap;
-  flex: 0 0 auto;
-}
-
-/* =========================================================
-   Responsive — drop low-value columns before the actions
-   ========================================================= */
-
-@media (max-width: 1000px) {
-  .stk-table col.col-lots {
-    display: none;
-  }
-  .stk-table col.col-name {
-    width: 26%;
-  }
-  .stk-table col.col-money {
-    width: 14%;
-  }
-  .stk-table col.col-actions {
-    width: 20%;
-  }
-}
-
-@media (max-width: 900px) {
-  .eso-table col.col-units {
-    display: none;
-  }
-  .eso-table col.col-company {
-    width: 28%;
-  }
-  .eso-table col.col-money {
-    width: 16%;
-  }
-  .eso-table col.col-actions {
-    width: 20%;
-  }
-}
-
-@media (max-width: 660px) {
-  .stk-table td.stk-actions,
-  .eso-table td.eso-actions {
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .stk-table td.stk-actions .icon-button,
-  .eso-table td.eso-actions .icon-button {
-    width: auto;
-    min-width: 0;
-  }
-}
-
-/* =========================================================
    SECTION SUMMARY CARDS + SECTION TABLES
    Used by: mutual_funds, esops, stocks, bank_accounts,
    fixed_deposits, recurring_deposits, metals, retirals,
@@ -1214,80 +351,6 @@
 }
 
 /* =========================================================
-   Stocks table (consolidated)
-   ========================================================= */
-
-.stk-table {
-  table-layout: fixed;
-  width: 100%;
-  min-width: 1000px;
-}
-
-.stk-table col.col-name {
-  width: 22%;
-}
-.stk-table col.col-market {
-  width: 10%;
-}
-.stk-table col.col-lots {
-  width: 6%;
-}
-.stk-table col.col-money {
-  width: 12%;
-}
-.stk-table col.col-pct {
-  width: 8%;
-}
-.stk-table col.col-actions {
-  width: 18%;
-}
-
-.stk-table th.stk-money,
-.stk-table td.stk-money,
-.stk-table th.stk-pct,
-.stk-table td.stk-pct,
-.stk-table th.stk-lots,
-.stk-table td.stk-lots,
-.stk-table th.stk-market,
-.stk-table td.stk-market {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.stk-table .stk-name {
-  white-space: normal;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  line-height: 1.3;
-}
-
-.stk-table td.stk-actions {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  flex-wrap: nowrap;
-  gap: 8px;
-  white-space: nowrap;
-  padding-right: 12px;
-}
-
-.stk-table td.stk-actions .stk-actions-form {
-  display: inline-flex;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  background: none;
-  border: 0;
-}
-
-.stk-table td.stk-actions .icon-button {
-  white-space: nowrap;
-  flex: 0 0 auto;
-}
-
-/* =========================================================
    ESOPs table (consolidated)
    ========================================================= */
 
@@ -1357,7 +420,7 @@
 }
 
 /* =========================================================
-   Lots tables — Stocks and ESOPs
+   Lots tables — Stocks and ESOPs detail views
    ========================================================= */
 
 .lots-panel-heading {
@@ -1464,37 +527,185 @@
   min-width: 55px;
 }
 
-/* Lot count badge in the consolidated table */
-.stk-lots .lots-link,
-.lots-link {
-  display: inline-flex;
+/* =========================================================
+   Stocks — US table
+   ========================================================= */
+
+.stock-us-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 1250px;
+}
+
+.stock-us-table col.col-name {
+  width: 16%;
+}
+.stock-us-table col.col-ticker {
+  width: 7%;
+}
+.stock-us-table col.col-num {
+  width: 8%;
+}
+.stock-us-table col.col-money {
+  width: 11%;
+}
+.stock-us-table col.col-pct {
+  width: 9%;
+}
+.stock-us-table col.col-actions {
+  width: 12%;
+}
+
+.stock-us-table th.su-money,
+.stock-us-table td.su-money,
+.stock-us-table th.su-num,
+.stock-us-table td.su-num,
+.stock-us-table th.su-pct,
+.stock-us-table td.su-pct {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.stock-us-table .su-name {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+.stock-us-table td.su-actions {
+  display: flex;
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
-  min-width: 26px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(79, 179, 201, 0.14);
-  border: 1px solid rgba(79, 179, 201, 0.35);
-  color: var(--cyan-bright);
-  font-weight: 700;
-  font-size: 11px;
-  text-decoration: none;
-  transition: background 0.15s var(--ease);
+  gap: 8px;
+  white-space: nowrap;
+  padding-right: 12px;
 }
 
-.lots-link:hover {
-  background: rgba(79, 179, 201, 0.28);
-  color: #fff;
+.stock-us-table td.su-actions form {
+  margin: 0;
+  display: inline-flex;
 }
 
-.lots-table tr:target {
-  background: rgba(79, 179, 201, 0.1);
-  box-shadow: inset 3px 0 0 var(--cyan-bright);
+/* =========================================================
+   Stocks — India table
+   ========================================================= */
+
+.stock-in-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 1500px;
+}
+
+.stock-in-table col.col-symbol {
+  width: 8%;
+}
+.stock-in-table col.col-company {
+  width: 13%;
+}
+.stock-in-table col.col-isin {
+  width: 9%;
+}
+.stock-in-table col.col-qty {
+  width: 5%;
+}
+.stock-in-table col.col-money {
+  width: 9%;
+}
+.stock-in-table col.col-pct {
+  width: 7%;
+}
+.stock-in-table col.col-actions {
+  width: 10%;
+}
+
+.stock-in-table th.si-money,
+.stock-in-table td.si-money,
+.stock-in-table th.si-qty,
+.stock-in-table td.si-qty,
+.stock-in-table th.si-pct,
+.stock-in-table td.si-pct {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.stock-in-table .si-symbol,
+.stock-in-table .si-isin {
+  white-space: nowrap;
+}
+
+.stock-in-table .si-company {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+.stock-in-table td.si-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  padding-right: 12px;
+}
+
+.stock-in-table td.si-actions form {
+  margin: 0;
+  display: inline-flex;
+}
+
+/* =========================================================
+   Shared helpers
+   ========================================================= */
+
+.positive {
+  color: var(--green);
+}
+.negative {
+  color: var(--pink);
+}
+
+.field-hint {
+  display: block;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 400;
+  margin-top: -2px;
+}
+
+/* Market toggle for stock_edit.html */
+.market-fields[data-market] {
+  display: contents;
 }
 
 /* =========================================================
    Responsive
    ========================================================= */
+
+@media (max-width: 1200px) {
+  .stock-us-table col.col-ticker {
+    display: none;
+  }
+  .stock-us-table col.col-name {
+    width: 20%;
+  }
+  .stock-us-table col.col-money {
+    width: 13%;
+  }
+
+  .stock-in-table col.col-isin {
+    display: none;
+  }
+  .stock-in-table col.col-company {
+    width: 20%;
+  }
+  .stock-in-table col.col-money {
+    width: 11%;
+  }
+}
 
 @media (max-width: 1100px) {
   .mf-table col.col-house {
@@ -1508,19 +719,6 @@
   }
   .mf-table col.col-actions {
     width: 12%;
-  }
-
-  .stk-table col.col-lots {
-    display: none;
-  }
-  .stk-table col.col-name {
-    width: 26%;
-  }
-  .stk-table col.col-money {
-    width: 14%;
-  }
-  .stk-table col.col-actions {
-    width: 20%;
   }
 
   .lots-table col.col-market {
@@ -1592,6 +790,29 @@
   .lots-table col.col-actions {
     width: 16%;
   }
+
+  .stock-us-table col.col-name {
+    width: 26%;
+  }
+  .stock-us-table col.col-num {
+    display: none;
+  }
+  .stock-us-table col.col-actions {
+    width: 18%;
+  }
+
+  .stock-in-table col.col-symbol {
+    width: 14%;
+  }
+  .stock-in-table col.col-company {
+    width: 26%;
+  }
+  .stock-in-table col.col-pct {
+    display: none;
+  }
+  .stock-in-table col.col-actions {
+    width: 16%;
+  }
 }
 
 @media (max-width: 660px) {
@@ -1616,18 +837,345 @@
   }
 
   .mf-table td.mf-actions,
-  .stk-table td.stk-actions,
   .eso-table td.eso-actions,
-  .lots-table td.lot-actions {
+  .lots-table td.lot-actions,
+  .stock-us-table td.su-actions,
+  .stock-in-table td.si-actions {
     flex-direction: row;
     align-items: center;
   }
 
   .mf-table td.mf-actions .icon-button,
-  .stk-table td.stk-actions .icon-button,
   .eso-table td.eso-actions .icon-button,
-  .lots-table td.lot-actions .icon-button {
+  .lots-table td.lot-actions .icon-button,
+  .stock-us-table td.su-actions .icon-button,
+  .stock-in-table td.si-actions .icon-button {
     width: auto;
     min-width: 0;
+  }
+}
+
+/* =========================================================
+   Stocks — card grid redesign
+   ========================================================= */
+
+.stocks-page {
+  width: 100%;
+  min-width: 0;
+}
+
+.stock-section {
+  margin-bottom: 32px;
+}
+
+.stock-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 20px;
+  margin-bottom: 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 40%),
+    linear-gradient(145deg, var(--panel), var(--panel-2));
+  box-shadow: var(--shadow-sm);
+}
+
+.stock-section-head h2 {
+  margin: 3px 0 0;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Card grid ---------- */
+
+.stock-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.us-grid {
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+}
+
+.in-grid {
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+}
+
+/* ---------- Card ---------- */
+
+.stock-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 24px 20px;
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 40%),
+    linear-gradient(145deg, var(--panel), var(--panel-2));
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Left accent strip indicates performance direction */
+.stock-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18px;
+  bottom: 18px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--cyan);
+}
+
+.stock-card.is-up::before {
+  background: var(--green);
+}
+.stock-card.is-down::before {
+  background: var(--pink);
+}
+
+/* Subtle radial glow behind the headline value */
+.stock-card::after {
+  content: "";
+  position: absolute;
+  right: -70px;
+  top: -70px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--cyan-soft), transparent 70%);
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.stock-card.is-up::after {
+  background: radial-gradient(circle, var(--green-soft), transparent 70%);
+}
+.stock-card.is-down::after {
+  background: radial-gradient(circle, var(--pink-soft), transparent 70%);
+}
+
+/* ---------- Header ---------- */
+
+.stock-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+}
+
+.stock-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.stock-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(79, 179, 201, 0.35);
+  background: var(--cyan-soft);
+  color: var(--cyan-bright);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+  width: fit-content;
+}
+
+.stock-name {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  color: #fff;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.stock-sub {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.stock-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.stock-card-actions form {
+  margin: 0;
+  display: inline-flex;
+}
+
+.stock-card-actions .icon-button {
+  white-space: nowrap;
+}
+
+/* ---------- Primary headline value ---------- */
+
+.stock-primary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 0 4px;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  min-width: 0;
+}
+
+.stock-primary-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.stock-primary-value {
+  font-size: clamp(22px, 2.2vw, 28px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: #fff;
+  overflow-wrap: anywhere;
+}
+
+.stock-card.is-up .stock-primary-value {
+  color: #7ed6b6;
+}
+.stock-card.is-down .stock-primary-value {
+  color: #ff92aa;
+}
+
+.stock-change {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin-top: 2px;
+}
+
+.stock-change.positive {
+  color: var(--green);
+}
+.stock-change.negative {
+  color: var(--pink);
+}
+
+/* ---------- Metrics list ---------- */
+
+.stock-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.stock-metric {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--line-soft);
+}
+
+.stock-metric dt {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.stock-metric dd {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+.stock-metric dd.positive {
+  color: var(--green);
+}
+.stock-metric dd.negative {
+  color: var(--pink);
+}
+
+/* For the Indian card, the metric labels are slightly longer — allow
+   them to wrap freely without truncation. */
+.in-metrics .stock-metric dt {
+  letter-spacing: 0.05em;
+  text-transform: none;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ---------- Empty state ---------- */
+
+.stock-empty {
+  padding: 40px 24px;
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--line);
+  background: rgba(255, 255, 255, 0.015);
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 900px) {
+  .stock-grid.us-grid,
+  .stock-grid.in-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .stock-card {
+    padding: 18px 18px 16px;
+  }
+
+  .stock-card-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .stock-card-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .stock-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .stock-section-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
   }
 }

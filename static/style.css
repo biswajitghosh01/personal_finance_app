@@ -1777,3 +1777,24 @@ table tbody td a:hover {
     grid-template-columns: 260px minmax(0, 1fr);
   }
 }
+
+/* =========================================================
+   Market toggle for stock_edit.html
+   ========================================================= */
+
+/* The wrapper is transparent so its <label> children become
+   direct grid items of the parent .form-grid. */
+.market-fields {
+  display: contents;
+}
+
+/* When toggled off, hide the entire group and its children. */
+.market-fields[hidden] {
+  display: none !important;
+}
+
+/* Utility for text-transform, replacing inline style attributes
+   which would be blocked by the Content-Security-Policy header. */
+.input-uppercase {
+  text-transform: uppercase;
+}
