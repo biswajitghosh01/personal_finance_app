@@ -94,6 +94,15 @@
   letter-spacing: -0.005em;
 }
 
+.budget-category-link {
+  text-decoration: none;
+  transition: color 0.15s var(--ease);
+}
+
+.budget-category-link:hover {
+  color: var(--cyan-bright);
+}
+
 .budget-currency {
   display: block;
   font-size: 11.5px;
@@ -106,10 +115,23 @@
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .budget-row-actions form {
   margin: 0;
+  display: inline-flex;
+}
+
+.icon-button.view {
+  background: rgba(217, 182, 111, 0.14);
+  border: 1px solid rgba(217, 182, 111, 0.35);
+  color: #e8c985;
+}
+
+.icon-button.view:hover {
+  background: rgba(217, 182, 111, 0.25);
+  color: #fff;
 }
 
 .budget-amounts {
@@ -166,7 +188,308 @@
   letter-spacing: 0.03em;
 }
 
+/* =========================================================
+   Budget spends drill-down page
+   ========================================================= */
+
+.budget-spends-page {
+  width: 100%;
+  min-width: 0;
+}
+
+.page-intro-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.spends-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.spends-summary-card {
+  padding: 18px 20px;
+  border-radius: var(--radius-lg);
+  border-left: 3px solid var(--gold);
+  min-width: 0;
+}
+
+.spends-summary-label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.spends-summary-value {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #fff;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.spends-summary-value.positive {
+  color: #7ed6b6;
+}
+.spends-summary-value.negative {
+  color: #ff92aa;
+}
+
+.spends-summary-card small {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.spends-summary-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.spends-summary-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.5s var(--ease);
+}
+
+.spends-summary-bar-fill.ok {
+  background: linear-gradient(90deg, var(--cyan), var(--cyan-bright));
+}
+
+.spends-summary-bar-fill.warning {
+  background: linear-gradient(90deg, #a88a4a, var(--gold));
+}
+
+.spends-summary-bar-fill.over {
+  background: linear-gradient(90deg, #a84e66, var(--pink));
+}
+
+.spends-two-col {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.spends-history-panel,
+.spends-add-panel {
+  min-width: 0;
+  padding-bottom: 6px;
+}
+
+.spends-history {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 20px 20px;
+}
+
+.spends-history-row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) 110px;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s var(--ease);
+}
+
+.spends-history-row:hover {
+  background: rgba(79, 179, 201, 0.04);
+}
+
+.spends-history-row.is-current {
+  background: rgba(79, 179, 201, 0.08);
+  box-shadow: inset 2px 0 0 var(--cyan-bright);
+}
+
+.spends-history-month {
+  font-size: 11.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+
+.spends-history-track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.spends-history-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--gold), #e8c985);
+  transition: width 0.6s var(--ease);
+}
+
+.spends-history-amount {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-align: right;
+}
+
+.spends-empty {
+  padding: 24px 20px;
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.spends-add-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 16px;
+  padding: 4px 20px 20px;
+}
+
+.spends-add-form .full {
+  grid-column: 1 / -1;
+}
+
+.spends-add-form label {
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.spends-add-form input,
+.spends-add-form textarea {
+  padding: 9px 11px;
+  font-size: 13px;
+}
+
+.spends-add-form .form-actions {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 14px;
+  margin-top: 6px;
+  justify-content: flex-end;
+}
+
+.spends-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 780px;
+}
+
+.spends-table col.col-date {
+  width: 12%;
+}
+.spends-table col.col-desc {
+  width: 40%;
+}
+.spends-table col.col-account {
+  width: 18%;
+}
+.spends-table col.col-money {
+  width: 15%;
+}
+
+.spends-table th.sp-date,
+.spends-table td.sp-date,
+.spends-table th.sp-account,
+.spends-table td.sp-account {
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.spends-table th.sp-money,
+.spends-table td.sp-money {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.spends-table td.sp-desc {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.spends-table td.sp-desc strong {
+  display: block;
+  color: #fff;
+  font-weight: 600;
+}
+
+.spends-table td.sp-desc small.muted {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.spends-table .sp-total-label {
+  text-align: right;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.spends-table .sp-total {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.spends-table tfoot td {
+  background: rgba(0, 0, 0, 0.15);
+  border-top: 2px solid var(--line-strong);
+  border-bottom: 0;
+  padding: 14px 16px;
+}
+
 /* Responsive */
+@media (max-width: 1100px) {
+  .spends-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .spends-history-row {
+    grid-template-columns: 68px minmax(0, 1fr) 90px;
+    gap: 8px;
+  }
+
+  .spends-history-amount {
+    font-size: 11px;
+  }
+
+  .spends-add-form {
+    grid-template-columns: 1fr;
+    padding: 4px 16px 16px;
+  }
+
+  .spends-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .spends-table col.col-account {
+    display: none;
+  }
+  .spends-table col.col-desc {
+    width: 55%;
+  }
+}
+
 @media (max-width: 640px) {
   .budget-row {
     padding: 16px 18px;

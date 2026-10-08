@@ -77,9 +77,15 @@ CSRFProtect(app)
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=['300 per hour'],
+    default_limits=['1200 per hour'],
     storage_uri='memory://',
+    default_limits_exempt_when=lambda: (
+        request.path.startswith('/static/')
+        or request.path.startswith('/admin/')
+    ),
 )
+app.extensions['limiter'] = limiter
+
 password_hasher = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4)
 cipher = Fernet(os.environ['DATA_KEY'].encode())
 app.extensions['finance_cipher'] = cipher
@@ -477,7 +483,6 @@ def clean_number(value):
 
 
 def clean_signed_number(value):
-    """Like clean_number but permits negatives — used for realized P&L."""
     try:
         number = Decimal((value or '0').strip())
     except InvalidOperation:
@@ -555,7 +560,7 @@ def security_headers(response):
     return response
 
 
-# ---------------------------------------------------------------- auth routes
+# ---------------------------------------------------------------- auth
 @app.route('/login', methods=['GET', 'POST'])
 @limiter.limit('5 per minute; 20 per hour')
 def login():
@@ -674,8 +679,6 @@ def dashboard():
         value = add(assets, row['currency'], row['current_value'])
         allocation['RECURRING_DEPOSIT'] = allocation.get('RECURRING_DEPOSIT', Decimal(0)) + value
 
-    # Stocks — use explicit USD values when present, otherwise fall back to
-    # units × current_price for Indian positions (remaining after any sales).
     for row in db.execute(
         'SELECT market, currency, number_of_shares, current_price, sale_units, '
         'us_total_invested, us_current_value FROM stocks WHERE user_id=?',
@@ -801,6 +804,7 @@ def dashboard():
         liabilities=liabilities,
         bank_balances=bank_balances,
         budget_summary=budget_summary,
+        current_month=current_month,
         allocation_chart=chart_data['allocation'],
         liability_chart=chart_data['liabilities'],
         chart_data=chart_data,
@@ -1419,7 +1423,6 @@ def _stock_form_values(form):
         us_total_invested = clean_number(form.get('us_total_invested'))
         us_current_value = clean_number(form.get('us_current_value'))
 
-        # The stocks table still requires these columns; store neutral values.
         units = '1'
         buy_price = '0'
         current_price = '0'
@@ -1462,7 +1465,6 @@ def _stock_form_values(form):
     )
     notes = clean_text(form.get('notes'), 1000)
 
-    # previous_close is retained in the schema but no longer collected from the form.
     return (
         stock_name, ticker, stock_symbol, company_name, isin_code, market,
         units, buy_price, current_price, '0', buy_date, currency,
@@ -1633,7 +1635,6 @@ def stock_edit(stock_id):
 @app.post('/stocks/<int:stock_id>/delete')
 @login_required
 def stock_delete(stock_id):
-    """Delete every lot belonging to the same (stock_name, market, currency) group."""
     db = get_db()
     row = db.execute(
         'SELECT stock_name, market, currency FROM stocks WHERE id=? AND user_id=?',
@@ -1656,7 +1657,6 @@ def stock_delete(stock_id):
 @app.post('/stocks/<int:stock_id>/delete-lot')
 @login_required
 def stock_delete_lot(stock_id):
-    """Delete a single stock lot."""
     cursor = get_db().execute(
         'DELETE FROM stocks WHERE id=? AND user_id=?', (stock_id, session['uid']),
     )
@@ -1786,7 +1786,6 @@ def esop_edit(esop_id):
 @app.post('/esops/<int:esop_id>/delete')
 @login_required
 def esop_delete(esop_id):
-    """Delete every grant belonging to the same (company_name, currency) group."""
     db = get_db()
     row = db.execute(
         'SELECT company_name, currency FROM esops WHERE id=? AND user_id=?',
@@ -1809,7 +1808,6 @@ def esop_delete(esop_id):
 @app.post('/esops/<int:esop_id>/delete-lot')
 @login_required
 def esop_delete_lot(esop_id):
-    """Delete a single ESOP grant."""
     cursor = get_db().execute(
         'DELETE FROM esops WHERE id=? AND user_id=?', (esop_id, session['uid']),
     )
@@ -2475,6 +2473,156 @@ def budget_delete(budget_id):
     audit('BUDGET_DELETE', budget_id)
     flash('Budget deleted.', 'success')
     return redirect(url_for('budgets'))
+
+
+@app.route('/budgets/<int:budget_id>/spends')
+@login_required
+def budget_spends(budget_id):
+    db = get_db()
+    uid = session['uid']
+
+    budget = db.execute(
+        'SELECT * FROM budgets WHERE id=? AND user_id=?',
+        (budget_id, uid),
+    ).fetchone()
+    if not budget:
+        abort(404)
+
+    today = datetime.now(timezone.utc).date()
+    default_month = f'{today.year}-{today.month:02d}'
+    selected_month = request.args.get('month', default_month)
+    if not re.fullmatch(r'\d{4}-\d{2}', selected_month):
+        selected_month = default_month
+
+    transactions = db.execute(
+        '''
+        SELECT id, transaction_date, description, amount, account_name, notes
+        FROM transactions
+        WHERE user_id=?
+          AND transaction_type='EXPENSE'
+          AND UPPER(TRIM(category))=UPPER(TRIM(?))
+          AND currency=?
+          AND substr(transaction_date,1,7)=?
+        ORDER BY transaction_date DESC, id DESC
+        ''',
+        (uid, budget['category'], budget['currency'], selected_month),
+    ).fetchall()
+
+    ascending = list(reversed(transactions))
+    running = Decimal('0')
+    running_map = {}
+    total = Decimal('0')
+    for tx in ascending:
+        amount = Decimal(str(tx['amount'] or '0'))
+        running += amount
+        running_map[tx['id']] = running
+        total += amount
+
+    rows = []
+    for tx in transactions:
+        item = dict(tx)
+        item['amount_value'] = float(tx['amount'] or 0)
+        item['running_total'] = float(running_map[tx['id']])
+        rows.append(item)
+
+    history_rows = db.execute(
+        '''
+        SELECT substr(transaction_date,1,7) AS month,
+               SUM(CAST(amount AS REAL)) AS spent
+        FROM transactions
+        WHERE user_id=?
+          AND transaction_type='EXPENSE'
+          AND UPPER(TRIM(category))=UPPER(TRIM(?))
+          AND currency=?
+        GROUP BY month
+        ORDER BY month DESC
+        LIMIT 12
+        ''',
+        (uid, budget['category'], budget['currency']),
+    ).fetchall()
+
+    history = []
+    for row in history_rows:
+        history.append({
+            'month': row['month'],
+            'spent': float(row['spent'] or 0),
+        })
+
+    max_spend = max((h['spent'] for h in history), default=0) or 1
+    for h in history:
+        h['width_pct'] = round((h['spent'] / max_spend) * 100, 1)
+
+    year, month = map(int, selected_month.split('-'))
+    first = today.replace(year=year, month=month, day=1)
+    prev_month = (first - timedelta(days=1)).strftime('%Y-%m')
+    next_month = f'{year + 1}-01' if month == 12 else f'{year}-{month + 1:02d}'
+
+    limit_value = float(budget['monthly_limit'] or 0)
+    total_value = float(total)
+    remaining = limit_value - total_value
+    percent = (total_value / limit_value * 100) if limit_value else 0
+
+    return render_template(
+        'budget_spends.html',
+        budget=budget,
+        rows=rows,
+        total=total_value,
+        limit=limit_value,
+        remaining=remaining,
+        percent=percent,
+        over=total_value > limit_value,
+        transaction_count=len(rows),
+        history=history,
+        selected_month=selected_month,
+        prev_month=prev_month,
+        next_month=next_month,
+        today=default_month,
+    )
+
+
+@app.route('/budgets/<int:budget_id>/spends/new', methods=['POST'])
+@login_required
+def budget_spend_new(budget_id):
+    db = get_db()
+    uid = session['uid']
+
+    budget = db.execute(
+        'SELECT * FROM budgets WHERE id=? AND user_id=?',
+        (budget_id, uid),
+    ).fetchone()
+    if not budget:
+        abort(404)
+
+    return_month = request.form.get('return_month', '')
+    if not re.fullmatch(r'\d{4}-\d{2}', return_month):
+        today = datetime.now(timezone.utc).date()
+        return_month = f'{today.year}-{today.month:02d}'
+
+    try:
+        transaction_date = clean_date(request.form.get('transaction_date'))
+        if not transaction_date:
+            raise ValueError('Date is required.')
+        description = clean_text(request.form.get('description'), 180, True)
+        amount = clean_number(request.form.get('amount'))
+        if Decimal(amount) <= 0:
+            raise ValueError('Amount must be greater than zero.')
+        account_name = clean_text(request.form.get('account_name'), 120)
+        notes = clean_text(request.form.get('notes'), 1000)
+    except ValueError as exc:
+        flash(str(exc), 'error')
+        return redirect(url_for('budget_spends', budget_id=budget_id, month=return_month))
+
+    cursor = db.execute(
+        'INSERT INTO transactions(user_id,transaction_date,transaction_type,category,'
+        'description,amount,currency,account_name,notes,created_at) '
+        'VALUES(?,?,?,?,?,?,?,?,?,?)',
+        (uid, transaction_date, 'EXPENSE', budget['category'], description,
+         amount, budget['currency'], account_name, notes, now()),
+    )
+    db.commit()
+    audit('TRANSACTION_CREATE_FROM_BUDGET', cursor.lastrowid)
+    flash(f'Spend recorded: {description}', 'success')
+    return redirect(url_for('budget_spends', budget_id=budget_id, month=return_month))
 
 
 # ---------------------------------------------------------------- errors & CLI

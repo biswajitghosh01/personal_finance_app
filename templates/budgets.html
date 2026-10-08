@@ -15,7 +15,10 @@ page_heading %}Budgets{% endblock %} {% block styles %}
     <div>
       <span class="eyebrow">MONTHLY BUDGETS</span>
       <h1>Budget Tracker</h1>
-      <p>Set a monthly limit per category and track spending against it.</p>
+      <p>
+        Set a monthly limit per category, track spending against it, and drill
+        into individual transactions.
+      </p>
     </div>
     <a class="button" href="{{ url_for('budget_new') }}">+ Add Budget</a>
   </section>
@@ -99,12 +102,23 @@ page_heading %}Budgets{% endblock %} {% block styles %}
       <article class="budget-row {{ 'is-over' if row.over else '' }}">
         <div class="budget-row-head">
           <div>
-            <strong class="budget-category">{{ row.category }}</strong>
+            <a
+              class="budget-category budget-category-link"
+              href="{{ url_for('budget_spends', budget_id=row.id, month=selected_month) }}"
+            >
+              {{ row.category }}
+            </a>
             <small class="budget-currency">
               {{ row.currency }}{% if row.notes %} · {{ row.notes }}{% endif %}
             </small>
           </div>
           <div class="budget-row-actions">
+            <a
+              class="icon-button view"
+              href="{{ url_for('budget_spends', budget_id=row.id, month=selected_month) }}"
+            >
+              View Spends
+            </a>
             <a
               class="icon-button edit"
               href="{{ url_for('budget_edit', budget_id=row.id) }}"

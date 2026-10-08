@@ -54,15 +54,16 @@ endblock %} {% block page_heading %}Overview{% endblock %} {% block content %}
   </article>
 </section>
 
-{# ---------- Budget status — full-width panel on its own row ---------- #} {%
-if budget_summary %}
+{% if budget_summary %}
 <section class="panel budget-panel">
   <div class="panel-heading budget-panel-heading">
     <div>
       <span class="eyebrow">BUDGET STATUS</span>
       <h2>This month's spending against limits</h2>
     </div>
-    <a class="button secondary" href="{{ url_for('budgets') }}"
+    <a
+      class="button secondary"
+      href="{{ url_for('budgets', month=current_month) }}"
       >Manage budgets</a
     >
   </div>
@@ -75,7 +76,11 @@ if budget_summary %}
     <div class="budget-panel-row">
       <div class="budget-panel-row-head">
         <div>
-          <span class="budget-panel-currency">{{ code }}</span>
+          <a
+            class="budget-panel-currency"
+            href="{{ url_for('budgets', month=current_month) }}"
+            >{{ code }}</a
+          >
           <strong class="budget-panel-amount">
             {{ currency_symbol(code) }} {{ '{:,.2f}'.format(total['spent']) }}
           </strong>
@@ -90,9 +95,9 @@ if budget_summary %}
             {{ '%.0f'|format(pct) }}%
           </strong>
           {% if total['over_count'] %}
-          <small class="budget-panel-over">
-            {{ total['over_count'] }} over
-          </small>
+          <small class="budget-panel-over"
+            >{{ total['over_count'] }} over</small
+          >
           {% elif remaining >= 0 %}
           <small
             >Left: {{ currency_symbol(code) }} {{ '{:,.2f}'.format(remaining)
