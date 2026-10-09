@@ -465,12 +465,6 @@ Clone using the token embedded in the URL:
 git clone https://<GITHUB_USERNAME>:<YOUR_PAT>@github.com/biswajitghosh01/personal_finance_app.git /opt/finance/app
 ```
 
-For example:
-
-```bash
-git clone https://biswajitghosh01:ghp_xxxxxxxxxxxxxxxxxxxx@github.com/biswajitghosh01/personal_finance_app.git /opt/finance/app
-```
-
 To avoid embedding the token in every future `git pull`, store it in
 `~/.netrc`:
 
