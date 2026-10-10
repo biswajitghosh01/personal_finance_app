@@ -23,9 +23,22 @@
            required autocomplete="off" spellcheck="false">
     <datalist id="budget-categories">
       {% for cat in [
-        'Food & Dining', 'Groceries', 'Rent', 'Utilities', 'Transportation',
-        'Healthcare', 'Entertainment', 'Shopping', 'Education', 'Insurance',
-        'Travel', 'EMI / Loan', 'Savings / Investment', 'Miscellaneous'
+        'Home Loan EMI',
+        'Personal Loan EMI',
+        'Parent Support',
+        'School Fees',
+        'Daycare',
+        'Kids Coaching',
+        'Maid',
+        'Maintenance',
+        'Insurance',
+        'Utilities & Transport',
+        'Groceries + Quick Commerce + Household',
+        'Lifestyle / Dining / Misc.',
+        'Unplanned UPI',
+        'Emergency Fund',
+        'Investments',
+        'Monthly Buffer'
       ] %}
         <option value="{{ cat }}"></option>
       {% endfor %}
@@ -35,6 +48,7 @@
     </datalist>
     <small class="field-hint">
       Must match the category used on your Expense transactions.
+      The suggestions above are only hints — you can type any name.
     </small>
   </label>
 
