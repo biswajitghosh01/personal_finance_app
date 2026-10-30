@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% set is_edit = esop_id is defined and esop_id %}
+{% block title %}{{ 'Edit' if is_edit else 'Add' }} ESOP{% endblock %}
+{% block page_heading %}ESOPs{% endblock %}
+{% block content %}
+<section class="page-intro">
+  <div><span class="eyebrow">{{ 'EDIT RECORD' if is_edit else 'NEW RECORD' }}</span><h1>{{ 'Edit' if is_edit else 'Add' }} ESOP Record</h1><p>Track each grant, vesting milestone, and current valuation.</p></div>
+  <a class="button secondary" href="{{ url_for('esops') }}">Cancel</a>
+</section>
+<form method="post" class="panel form-grid" id="esop-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>Company / Employer<input name="company_name" maxlength="120" value="{{ esop['company_name']|default('',true) }}" required></label>
+  <label>Currency<select name="currency" required>{% for item in currencies %}<option value="{{ item }}" {% if esop['currency']|default('INR',true)==item %}selected{% endif %}>{{ currency_symbol(item) }} {{ item }}</option>{% endfor %}</select></label>
+  <label>Grant Date<input type="date" name="grant_date" value="{{ esop['grant_date']|default('',true) }}" required></label>
+  <label>Vesting Date<input type="date" name="vesting_date" value="{{ esop['vesting_date']|default('',true) }}"></label>
+  <label>Units Granted<input type="number" step="any" min="0.000001" name="number_of_units" id="number_of_units" value="{{ esop['number_of_units']|default('',true) }}" required></label>
+  <label>Grant Price per Unit<input type="number" step="0.0001" min="0" name="grant_price" id="grant_price" value="{{ esop['grant_price']|default('0',true) }}" required></label>
+  <label>Current Price per Unit<input type="number" step="0.0001" min="0" name="current_price" id="current_price" value="{{ esop['current_price']|default('0',true) }}" required></label>
+  <label>Total Grant Value<input class="calculated" id="total_grant_value" value="0.00" readonly></label>
+  <label>Current Value<input class="calculated" id="current_value" value="0.00" readonly></label>
+  <label>Unrealised P&amp;L<input class="calculated" id="profit_loss_amount" value="0.00" readonly></label>
+  <label>Return<input class="calculated" id="profit_loss_percentage" value="0.00%" readonly></label>
+  <label class="full">Notes<textarea name="notes" maxlength="1000">{{ esop['notes']|default('',true) }}</textarea></label>
+  <div class="full form-actions"><a class="button secondary" href="{{ url_for('esops') }}">Cancel</a><button type="submit">{{ 'Update' if is_edit else 'Save' }} ESOP Record</button></div>
+</form>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static',filename='esops.js') }}" defer></script>{% endblock %}

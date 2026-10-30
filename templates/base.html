@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#252636" />
+    <title>{% block title %}Finance Dashboard{% endblock %}</title>
+    <link
+      rel="icon"
+      href="{{ url_for('static', filename='favicon.svg') }}"
+      type="image/svg+xml"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css', v=28) }}"
+    />
+    {% block styles %}{% endblock %}
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <a class="brand" href="{{ url_for('dashboard') }}">
+          <span class="brand-mark" aria-hidden="true"
+            ><i></i><i></i><i></i
+          ></span>
+          <span class="brand-copy">
+            <strong>Secure Finance</strong>
+            <small>PRIVATE WEALTH</small>
+          </span>
+        </a>
+
+        {% if session.uid %}
+        <form
+          class="signout-form"
+          method="post"
+          action="{{ url_for('logout') }}"
+        >
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <button class="nav-link nav-button" type="submit">
+            <span aria-hidden="true">↪</span>Sign out
+          </button>
+        </form>
+
+        <nav class="side-nav" aria-label="Primary navigation">
+          <section class="nav-group" aria-labelledby="nav-overview">
+            <h2 class="nav-group-title" id="nav-overview">Overview</h2>
+            <a class="nav-link" href="{{ url_for('dashboard') }}"
+              ><span aria-hidden="true">◷</span>Overview</a
+            >
+            <a class="nav-link" href="{{ url_for('bank_accounts') }}"
+              ><span aria-hidden="true">▤</span>Accounts</a
+            >
+          </section>
+
+          <section class="nav-group" aria-labelledby="nav-investments">
+            <h2 class="nav-group-title" id="nav-investments">Investments</h2>
+            <a class="nav-link" href="{{ url_for('fixed_deposits') }}"
+              ><span aria-hidden="true">◆</span>Fixed Deposits</a
+            >
+            <a class="nav-link" href="{{ url_for('recurring_deposits') }}"
+              ><span aria-hidden="true">◈</span>Recurring Deposits</a
+            >
+            <a class="nav-link" href="{{ url_for('stocks') }}"
+              ><span aria-hidden="true">▥</span>Stocks</a
+            >
+            <a
+              class="nav-link"
+              href="{{ url_for('section', category='MUTUAL_FUND') }}"
+              ><span aria-hidden="true">◒</span>Mutual Funds</a
+            >
+            <a class="nav-link" href="{{ url_for('esops') }}"
+              ><span aria-hidden="true">◐</span>ESOPs</a
+            >
+            <a
+              class="nav-link"
+              href="{{ url_for('section', category='METAL') }}"
+              ><span aria-hidden="true">◉</span>Metals</a
+            >
+            <a
+              class="nav-link"
+              href="{{ url_for('section', category='OTHER') }}"
+              ><span aria-hidden="true">◍</span>Other Assets</a
+            >
+          </section>
+
+          <section class="nav-group" aria-labelledby="nav-planning">
+            <h2 class="nav-group-title" id="nav-planning">Planning</h2>
+            <a class="nav-link" href="{{ url_for('retirals') }}"
+              ><span aria-hidden="true">⇄</span>Retirals</a
+            >
+            <a class="nav-link" href="{{ url_for('budgets') }}"
+              ><span aria-hidden="true">▦</span>Budgets</a
+            >
+            <a
+              class="nav-link"
+              href="{{ url_for('section', category='LIABILITY') }}"
+              ><span aria-hidden="true">▼</span>Liabilities</a
+            >
+          </section>
+
+          <section class="nav-group" aria-labelledby="nav-account">
+            <h2 class="nav-group-title" id="nav-account">Account</h2>
+            <a class="nav-link" href="{{ url_for('admin.profile') }}"
+              ><span aria-hidden="true">●</span>Profile</a
+            >
+            {% if is_admin %}
+            <a class="nav-link" href="{{ url_for('admin.dashboard') }}"
+              ><span aria-hidden="true">⚙</span>Admin settings</a
+            >
+            <a class="nav-link" href="{{ url_for('admin.health') }}"
+              ><span aria-hidden="true">✚</span>System health</a
+            >
+            {% endif %}
+          </section>
+        </nav>
+        {% endif %}
+      </aside>
+
+      <div class="workspace">
+        <header class="topbar">
+          <button
+            class="menu-toggle"
+            id="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-controls="sidebar"
+            aria-expanded="false"
+          >
+            ☰
+          </button>
+          <div class="topbar-title">
+            <strong
+              >{% block page_heading %}Financial Overview{% endblock %}</strong
+            >
+            <small>Private wealth and portfolio tracker</small>
+          </div>
+          {% if session.uid %}<span class="user-chip"
+            >{{ session.username }}</span
+          >{% endif %}
+        </header>
+
+        <main class="{% block main_class %}{% endblock %}">
+          {% for category, message in get_flashed_messages(with_categories=true)
+          %}
+          <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %} {% block content %}{% endblock %}
+        </main>
+
+        <footer>
+          Made with
+          <span class="heart-white heart-white--glow">&#9829;</span> by
+          Biswajitt
+        </footer>
+      </div>
+    </div>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css', v=14) }}"
+    />
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

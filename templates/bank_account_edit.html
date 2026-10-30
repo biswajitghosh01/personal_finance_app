@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% set editing = is_edit|default(false) %}
+{% block title %}{{ 'Edit' if editing else 'Add' }} Bank Account{% endblock %}
+{% block page_heading %}Bank Accounts{% endblock %}
+{% block content %}
+<section class="page-intro">
+    <div>
+        <span class="eyebrow">{{ 'EDIT RECORD' if editing else 'NEW RECORD' }}</span>
+        <h1>{{ 'Edit' if editing else 'Add' }} Bank Account</h1>
+        {% if editing %}
+        <p>Update the bank account details. The account number will be re-encrypted when saved.</p>
+        {% else %}
+        <p>Add a bank account. The account number will be encrypted before it is stored.</p>
+        {% endif %}
+    </div>
+    <a class="button secondary" href="{{ url_for('bank_accounts') }}">Cancel</a>
+</section>
+
+<form method="post" class="panel form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <label>
+        Name of the Bank
+        <input name="bank_name" maxlength="120" value="{{ account['bank_name']|default('', true) }}" required>
+    </label>
+
+    <label>
+        Account Number
+        <input
+            type="text"
+            name="account_number"
+            maxlength="80"
+            value="{{ account['account_number']|default('', true) }}"
+            required
+            autocomplete="off"
+            spellcheck="false"
+        >
+    </label>
+
+    <label>
+        IFSC Code
+        <input name="ifsc_code" maxlength="20" value="{{ account['ifsc_code']|default('', true) }}">
+    </label>
+
+    <label>
+        MICR Code
+        <input name="micr_code" maxlength="20" value="{{ account['micr_code']|default('', true) }}">
+    </label>
+
+    <label>
+        Account Type
+        <select name="account_type" required>
+            {% for item in account_types %}
+            <option value="{{ item }}" {% if account['account_type']|default('', true) == item %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <label>
+        Currency
+        <select name="currency" required>
+            {% for item in currencies %}
+            <option value="{{ item }}" {% if account['currency']|default('INR', true) == item %}selected{% endif %}>{{ currency_symbol(item) }} {{ item }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+    <label>
+        Current Balance
+        <input type="number" name="current_balance" step="0.01" min="0" value="{{ account['current_balance']|default('0', true) }}" required>
+    </label>
+
+    <label>
+        Interest Rate (%)
+        <input type="number" name="interest_rate" step="0.0001" min="0" max="100" value="{{ account['interest_rate']|default('0', true) }}" required>
+    </label>
+
+    <label class="full">
+        Bank Address
+        <textarea name="bank_address" maxlength="500">{{ account['bank_address']|default('', true) }}</textarea>
+    </label>
+
+    <label class="full">
+        Notes
+        <textarea name="notes" maxlength="1000">{{ account['notes']|default('', true) }}</textarea>
+    </label>
+
+    <div class="full form-actions">
+        <a class="button secondary" href="{{ url_for('bank_accounts') }}">Cancel</a>
+        <button type="submit">{{ 'Update' if editing else 'Save' }} Bank Account</button>
+    </div>
+</form>
+{% endblock %}

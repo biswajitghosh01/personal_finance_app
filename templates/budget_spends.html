@@ -1,0 +1,284 @@
+{% extends 'base.html' %} {% block title %}{{ budget['category'] }} · Budget
+Spends{% endblock %} {% block page_heading %}Budget Spends{% endblock %} {%
+block styles %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', filename='record_actions.css') }}"
+/>
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', filename='portfolio_summary.css') }}"
+/>
+<link rel="stylesheet" href="{{ url_for('static', filename='budgets.css') }}" />
+{% endblock %} {% block content %}
+<div class="portfolio-page budget-spends-page">
+  <section class="page-intro">
+    <div>
+      <span class="eyebrow">BUDGET DRILL-DOWN</span>
+      <h1>{{ budget['category'] }}</h1>
+      <p>
+        {{ budget['currency'] }} · monthly limit {{
+        currency_symbol(budget['currency']) }} {{ '{:,.2f}'.format(limit) }} {%
+        if budget['notes'] %}· {{ budget['notes'] }}{% endif %}
+      </p>
+    </div>
+    <div class="page-intro-actions">
+      <a
+        class="button secondary"
+        href="{{ url_for('budget_edit', budget_id=budget['id']) }}"
+        >Edit Budget</a
+      >
+      <a
+        class="button secondary"
+        href="{{ url_for('budgets', month=selected_month) }}"
+        >Back to Budgets</a
+      >
+    </div>
+  </section>
+
+  <div class="budget-month-nav" aria-label="Month selector">
+    <a
+      class="month-nav-btn"
+      href="{{ url_for('budget_spends', budget_id=budget['id'], month=prev_month) }}"
+      >‹ {{ prev_month }}</a
+    >
+    <strong>{{ selected_month }}</strong>
+    <a
+      class="month-nav-btn"
+      href="{{ url_for('budget_spends', budget_id=budget['id'], month=next_month) }}"
+      >{{ next_month }} ›</a
+    >
+  </div>
+
+  <section class="spends-summary" aria-label="Spend summary">
+    <article class="panel spends-summary-card">
+      <span class="spends-summary-label">Total spent</span>
+      <strong class="spends-summary-value {{ 'negative' if over else '' }}">
+        {{ currency_symbol(budget['currency']) }} {{ '{:,.2f}'.format(total) }}
+      </strong>
+      <small
+        >{{ transaction_count }} {{ 'transaction' if transaction_count == 1 else
+        'transactions' }}</small
+      >
+    </article>
+
+    <article class="panel spends-summary-card">
+      <span class="spends-summary-label">Monthly limit</span>
+      <strong class="spends-summary-value">
+        {{ currency_symbol(budget['currency']) }} {{ '{:,.2f}'.format(limit) }}
+      </strong>
+      <small>Set in {{ budget['category'] }} budget</small>
+    </article>
+
+    <article class="panel spends-summary-card">
+      <span class="spends-summary-label"
+        >{{ 'Over by' if over else 'Remaining' }}</span
+      >
+      <strong
+        class="spends-summary-value {{ 'negative' if over else 'positive' }}"
+      >
+        {{ currency_symbol(budget['currency']) }} {{
+        '{:,.2f}'.format(remaining|abs) }}
+      </strong>
+      <small
+        >{{ 'Overspent this month' if over else 'Still available this month'
+        }}</small
+      >
+    </article>
+
+    <article class="panel spends-summary-card">
+      <span class="spends-summary-label">Budget used</span>
+      <strong class="spends-summary-value {{ 'negative' if over else '' }}">
+        {{ '%.1f'|format(percent) }}%
+      </strong>
+      <div class="spends-summary-bar">
+        <div
+          class="spends-summary-bar-fill {{ 'over' if over else ('warning' if percent >= 80 else 'ok') }}"
+          style="width: {{ [percent, 100]|min }}%;"
+        ></div>
+      </div>
+    </article>
+  </section>
+
+  <section class="spends-two-col">
+    <article class="panel spends-history-panel">
+      <div class="panel-heading lots-panel-heading">
+        <div>
+          <span class="eyebrow">TREND</span>
+          <h2>Recent spending history</h2>
+        </div>
+        <span class="badge"
+          >Last {{ history|length }} {{ 'month' if history|length == 1 else
+          'months' }}</span
+        >
+      </div>
+
+      {% if history %}
+      <div class="spends-history">
+        {% for h in history %}
+        <div
+          class="spends-history-row {{ 'is-current' if h.month == selected_month else '' }}"
+        >
+          <span class="spends-history-month">{{ h.month }}</span>
+          <div class="spends-history-track">
+            <div
+              class="spends-history-fill"
+              style="width: {{ h.width_pct }}%;"
+              title="{{ currency_symbol(budget['currency']) }} {{ '{:,.2f}'.format(h.spent) }}"
+            ></div>
+          </div>
+          <span class="spends-history-amount">
+            {{ currency_symbol(budget['currency']) }} {{
+            '{:,.0f}'.format(h.spent) }}
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="spends-empty">No spending recorded for this category yet.</p>
+      {% endif %}
+    </article>
+
+    <article class="panel spends-add-panel">
+      <div class="panel-heading lots-panel-heading">
+        <div>
+          <span class="eyebrow">QUICK ENTRY</span>
+          <h2>Log a spend</h2>
+        </div>
+      </div>
+
+      <form
+        method="post"
+        action="{{ url_for('budget_spend_new', budget_id=budget['id']) }}"
+        class="spends-add-form"
+      >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <input type="hidden" name="return_month" value="{{ selected_month }}" />
+
+        <label>
+          Date
+          <input
+            type="date"
+            name="transaction_date"
+            value="{{ selected_month }}-01"
+            required
+          />
+        </label>
+
+        <label>
+          Description
+          <input
+            name="description"
+            maxlength="180"
+            required
+            placeholder="Coffee, groceries, fuel..."
+          />
+        </label>
+
+        <label>
+          Amount ({{ budget['currency'] }})
+          <input type="number" step="any" min="0.01" name="amount" required />
+        </label>
+
+        <label>
+          Account / Source
+          <input name="account_name" maxlength="120" placeholder="Optional" />
+        </label>
+
+        <label class="full">
+          Notes
+          <textarea name="notes" maxlength="1000" rows="2"></textarea>
+        </label>
+
+        <div class="full form-actions">
+          <button type="submit">Add Spend</button>
+        </div>
+      </form>
+    </article>
+  </section>
+
+  <section class="panel data-panel section-gap">
+    <div class="panel-heading lots-panel-heading">
+      <div>
+        <span class="eyebrow">TRANSACTIONS</span>
+        <h2>{{ budget['category'] }} · {{ selected_month }}</h2>
+      </div>
+      <span class="badge"
+        >{{ transaction_count }} {{ 'item' if transaction_count == 1 else
+        'items' }}</span
+      >
+    </div>
+
+    {% if rows %}
+    <div class="table-wrap">
+      <table class="spends-table">
+        <colgroup>
+          <col class="col-date" />
+          <col class="col-desc" />
+          <col class="col-account" />
+          <col class="col-money" />
+          <col class="col-money" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="sp-date">Date</th>
+            <th class="sp-desc">Description</th>
+            <th class="sp-account">Account / Source</th>
+            <th class="sp-money">Amount</th>
+            <th class="sp-money">Running Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td class="sp-date">{{ row.transaction_date }}</td>
+            <td class="sp-desc">
+              <strong>{{ row.description }}</strong>
+              {% if row.notes %}<small class="muted">{{ row.notes }}</small>{%
+              endif %}
+            </td>
+            <td class="sp-account">{{ row.account_name or '—' }}</td>
+            <td class="sp-money money">
+              {{ currency_symbol(budget['currency']) }} {{
+              '{:,.2f}'.format(row.amount_value) }}
+            </td>
+            <td class="sp-money money">
+              {{ currency_symbol(budget['currency']) }} {{
+              '{:,.2f}'.format(row.running_total) }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3" class="sp-total-label">
+              Total spent in {{ selected_month }}
+            </td>
+            <td class="sp-money money sp-total">
+              {{ currency_symbol(budget['currency']) }} {{
+              '{:,.2f}'.format(total) }}
+            </td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <strong>No spends recorded for {{ selected_month }}</strong>
+      <p>
+        Use the Log a Spend form above to add one, or record an expense
+        transaction with the category "{{ budget['category'] }}".
+      </p>
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %} {% block scripts %}
+<script>
+  const amountInput = document.querySelector(
+    '.spends-add-form input[name="amount"]',
+  );
+  if (amountInput) amountInput.focus();
+</script>
+{% endblock %}

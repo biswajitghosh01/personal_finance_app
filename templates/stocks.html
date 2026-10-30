@@ -1,0 +1,347 @@
+{% extends 'base.html' %} {% from '_summary_card.html' import summary_card %} {%
+block title %}Stocks{% endblock %} {% block page_heading %}Stocks{% endblock %}
+{% block main_class %}main-wide{% endblock %} {% block styles %}
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', filename='record_actions.css') }}"
+/>
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', filename='portfolio_summary.css') }}"
+/>
+{% endblock %} {% block content %}
+<div class="stocks-page">
+  <section class="page-intro">
+    <div>
+      <span class="eyebrow">EQUITY HOLDINGS</span>
+      <h1>Stocks</h1>
+      <p>
+        US and Indian equity positions with per-market detail and editable
+        transaction lots.
+      </p>
+    </div>
+    <a class="button" href="{{ url_for('stock_new') }}">+ New Record</a>
+  </section>
+
+  {% if summary %}
+  <section class="summary-cards" aria-label="Stock portfolio summary">
+    {% for code, total in summary.items() %} {% set pnl = total['current'] -
+    total['invested'] %} {% set pct = (pnl / total['invested'] * 100) if
+    total['invested'] else 0 %} {{ summary_card( label='Stock portfolio value',
+    currency=code, current=total['current'], invested=total['invested'],
+    pnl=pnl, pct=pct, count=total['count'], accent='cyan' ) }} {% endfor %}
+  </section>
+  {% else %}
+  <section class="summary-empty">
+    <strong>No stock holdings yet</strong>
+    <p>Add a stock record to begin tracking performance.</p>
+  </section>
+  {% endif %} {# ============================================================ US
+  EQUITY — card grid
+  ============================================================ #}
+  <section class="stock-section">
+    <header class="stock-section-head">
+      <div>
+        <span class="eyebrow">UNITED STATES</span>
+        <h2>US Equity Holdings</h2>
+      </div>
+      <span class="badge"
+        >{{ us_rows|length }} {{ 'position' if us_rows|length == 1 else
+        'positions' }}</span
+      >
+    </header>
+
+    {% if us_rows %}
+    <div class="stock-grid us-grid">
+      {% for row in us_rows %} {% set positive = row.unrealized >= 0 %}
+      <article class="stock-card {{ 'is-up' if positive else 'is-down' }}">
+        <header class="stock-card-head">
+          <div class="stock-identity">
+            <span class="stock-pill">{{ row.ticker or '—' }}</span>
+            <h3 class="stock-name">{{ row.company_name or row.stock_name }}</h3>
+          </div>
+          <div class="stock-card-actions">
+            <a
+              class="icon-button edit"
+              href="{{ url_for('stock_edit', stock_id=row.id) }}"
+              >Edit</a
+            >
+            <form
+              method="post"
+              action="{{ url_for('stock_delete_lot', stock_id=row.id) }}"
+              data-confirm="Delete {{ row.ticker or row.stock_name }}?"
+            >
+              <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+              />
+              <button class="icon-button danger" type="submit">Delete</button>
+            </form>
+          </div>
+        </header>
+
+        <div class="stock-primary">
+          <span class="stock-primary-label">Current Value (USD)</span>
+          <strong class="stock-primary-value"
+            >${{ '{:,.2f}'.format(row.current_value) }}</strong
+          >
+        </div>
+
+        <dl class="stock-metrics">
+          <div class="stock-metric">
+            <dt>Total Amount Invested (USD)</dt>
+            <dd>${{ '{:,.2f}'.format(row.total_invested) }}</dd>
+          </div>
+          <div class="stock-metric">
+            <dt>Current Value (USD)</dt>
+            <dd>${{ '{:,.2f}'.format(row.current_value) }}</dd>
+          </div>
+          <div class="stock-metric">
+            <dt>Investment Returns (USD)</dt>
+            <dd class="{{ 'positive' if positive else 'negative' }}">
+              {{ '+' if positive else '−' }}${{
+              '{:,.2f}'.format(row.unrealized|abs) }}
+            </dd>
+          </div>
+          <div class="stock-metric">
+            <dt>Investment Returns (%)</dt>
+            <dd class="{{ 'positive' if positive else 'negative' }}">
+              {{ '%+.2f'|format(row.unrealized_pct) }}%
+            </dd>
+          </div>
+        </dl>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="stock-empty">No US stock holdings yet.</div>
+    {% endif %}
+  </section>
+
+  {# ============================================================ INDIAN EQUITY
+  — card grid ============================================================ #}
+  <section class="stock-section">
+    <header class="stock-section-head">
+      <div>
+        <span class="eyebrow">INDIA</span>
+        <h2>Indian Equity Holdings</h2>
+      </div>
+      <span class="badge"
+        >{{ india_rows|length }} {{ 'position' if india_rows|length == 1 else
+        'positions' }}</span
+      >
+    </header>
+
+    {% if india_rows %}
+    <div class="stock-grid in-grid">
+      {% for row in india_rows %} {% set positive = row.unrealized >= 0 %}
+      <article class="stock-card {{ 'is-up' if positive else 'is-down' }}">
+        <header class="stock-card-head">
+          <div class="stock-identity">
+            <span class="stock-pill">{{ row.stock_symbol or '—' }}</span>
+            <h3 class="stock-name">{{ row.company_name or row.stock_name }}</h3>
+            <span class="stock-sub">{{ row.isin_code or '—' }}</span>
+          </div>
+          <div class="stock-card-actions">
+            <a
+              class="icon-button edit"
+              href="{{ url_for('stock_edit', stock_id=row.id) }}"
+              >Edit</a
+            >
+            <form
+              method="post"
+              action="{{ url_for('stock_delete_lot', stock_id=row.id) }}"
+              data-confirm="Delete {{ row.stock_symbol or row.stock_name }}?"
+            >
+              <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+              />
+              <button class="icon-button danger" type="submit">Delete</button>
+            </form>
+          </div>
+        </header>
+
+        <div class="stock-primary">
+          <span class="stock-primary-label">Value At Market Price</span>
+          <strong class="stock-primary-value"
+            >₹{{ '{:,.2f}'.format(row.current_value) }}</strong
+          >
+        </div>
+
+        <dl class="stock-metrics in-metrics">
+          <div class="stock-metric">
+            <dt>Qty</dt>
+            <dd>{{ '%.6g'|format(row.remaining_units) }}</dd>
+          </div>
+          <div class="stock-metric">
+            <dt>Average Cost Price</dt>
+            <dd>₹{{ '{:,.6g}'.format(row.buy_price) }}</dd>
+          </div>
+          <div class="stock-metric">
+            <dt>Current Market Price</dt>
+            <dd>₹{{ '{:,.6g}'.format(row.current_price) }}</dd>
+          </div>
+          <div class="stock-metric">
+            <dt>Value At Cost</dt>
+            <dd>₹{{ '{:,.2f}'.format(row.total_invested) }}</dd>
+          </div>
+          <div class="stock-metric">
+            <dt>Realized Profit / Loss</dt>
+            <dd class="{{ 'positive' if row.realized >= 0 else 'negative' }}">
+              {{ '+' if row.realized >= 0 else '−' }}₹{{
+              '{:,.2f}'.format(row.realized|abs) }}
+            </dd>
+          </div>
+          <div class="stock-metric">
+            <dt>Unrealized Profit / Loss</dt>
+            <dd class="{{ 'positive' if positive else 'negative' }}">
+              {{ '+' if positive else '−' }}₹{{
+              '{:,.2f}'.format(row.unrealized|abs) }}
+            </dd>
+          </div>
+          <div class="stock-metric">
+            <dt>Unrealized Profit / Loss %</dt>
+            <dd class="{{ 'positive' if positive else 'negative' }}">
+              {{ '%+.2f'|format(row.unrealized_pct) }}%
+            </dd>
+          </div>
+        </dl>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="stock-empty">No Indian stock holdings yet.</div>
+    {% endif %}
+  </section>
+
+  {# ============================================================ TRANSACTION
+  LOTS ============================================================ #} {% set
+  all_lots = us_rows + india_rows %} {% if all_lots %}
+  <section class="stock-section">
+    <header class="stock-section-head">
+      <div>
+        <span class="eyebrow">TRANSACTION RECORDS</span>
+        <h2>Transaction Lots</h2>
+      </div>
+      <span class="badge"
+        >{{ all_lots|length }} {{ 'lot' if all_lots|length == 1 else 'lots'
+        }}</span
+      >
+    </header>
+
+    <div class="panel data-panel">
+      <div class="table-wrap">
+        <table class="lots-table">
+          <colgroup>
+            <col class="col-lot-id" />
+            <col class="col-name" />
+            <col class="col-market" />
+            <col class="col-date" />
+            <col class="col-num" />
+            <col class="col-money" />
+            <col class="col-money" />
+            <col class="col-money" />
+            <col class="col-money" />
+            <col class="col-sale" />
+            <col class="col-actions" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="lot-id">#</th>
+              <th class="lot-name">Stock</th>
+              <th class="lot-market">Market</th>
+              <th class="lot-date">Buy Date</th>
+              <th class="lot-num">Units</th>
+              <th class="lot-money">Buy Price</th>
+              <th class="lot-money">Current Price</th>
+              <th class="lot-money">Original Cost</th>
+              <th class="lot-money">Current Value</th>
+              <th class="lot-sale">Sale</th>
+              <th class="lot-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for lot in all_lots %} {% set is_us = lot.market == 'United
+            States' %} {% set symbol = '$' if is_us else '₹' %}
+            <tr id="lot-{{ lot.id }}">
+              <td class="lot-id">{{ loop.index }}</td>
+              <td class="lot-name">
+                <strong
+                  >{{ lot.stock_symbol or lot.ticker or lot.stock_name
+                  }}</strong
+                >
+                {% if lot.company_name and lot.company_name != lot.stock_name %}
+                <small class="muted">{{ lot.company_name }}</small>
+                {% endif %}
+              </td>
+              <td class="lot-market">{{ lot.market }}</td>
+              <td class="lot-date">{{ lot.buy_transaction_date }}</td>
+              <td class="lot-num">
+                {% if is_us and lot.use_us_values %}—{% else %}{{
+                '%.6g'|format(lot.units) }}{% endif %}
+              </td>
+              <td class="lot-money money">
+                {% if is_us and lot.use_us_values %}—{% else %}{{ symbol }}{{
+                '{:,.6g}'.format(lot.buy_price) }}{% endif %}
+              </td>
+              <td class="lot-money money">
+                {% if is_us and lot.use_us_values %}—{% else %}{{ symbol }}{{
+                '{:,.6g}'.format(lot.current_price) }}{% endif %}
+              </td>
+              <td class="lot-money money">
+                {{ symbol }}{{ '{:,.2f}'.format(lot.original_cost) }}
+              </td>
+              <td class="lot-money money">
+                {{ symbol }}{{ '{:,.2f}'.format(lot.current_value) }}
+              </td>
+              <td class="lot-sale">
+                {% if lot.sale_units and lot.sale_units|float > 0 %} {{
+                '%.6g'|format(lot.sale_units|float) }} @ {{ symbol }}{{
+                '{:,.2f}'.format(lot.sell_price|float) }} {% if lot.sale_date %}
+                <small class="muted">on {{ lot.sale_date }}</small>
+                {% endif %} {% else %}
+                <span class="muted">—</span>
+                {% endif %}
+              </td>
+              <td class="lot-actions">
+                <a
+                  class="icon-button edit"
+                  href="{{ url_for('stock_edit', stock_id=lot.id) }}"
+                  >Edit</a
+                >
+                <form
+                  method="post"
+                  action="{{ url_for('stock_delete_lot', stock_id=lot.id) }}"
+                  data-confirm="Delete this stock lot?"
+                >
+                  <input
+                    type="hidden"
+                    name="csrf_token"
+                    value="{{ csrf_token() }}"
+                  />
+                  <button class="icon-button danger" type="submit">
+                    Delete
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% endblock %} {% block scripts %}
+<script>
+  document.querySelectorAll("form[data-confirm]").forEach(function (form) {
+    form.addEventListener("submit", function (event) {
+      if (!window.confirm(form.dataset.confirm)) event.preventDefault();
+    });
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,1 @@
+document.querySelectorAll('form[data-confirm]').forEach(form=>{form.addEventListener('submit',event=>{const message=form.dataset.confirm||'Continue?';if(!window.confirm(message))event.preventDefault();});});

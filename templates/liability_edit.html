@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% set is_edit = liability_id is defined and liability_id %}
+{% block title %}{{ 'Edit' if is_edit else 'Add' }} Liability{% endblock %}
+{% block page_heading %}Liabilities{% endblock %}
+{% block styles %}<link rel="stylesheet" href="{{ url_for('static', filename='liabilities.css') }}">{% endblock %}
+{% block content %}
+<div class="liabilities-page">
+<section class="page-intro liabilities-intro"><div><span class="eyebrow">{{ 'EDIT RECORD' if is_edit else 'NEW RECORD' }}</span><h1>{{ 'Edit' if is_edit else 'Add' }} Loan</h1><p>{{ 'Update the loan and repayment details.' if is_edit else 'Enter the loan and repayment details.' }}</p></div><a class="button secondary" href="{{ url_for('liabilities') }}">Cancel</a></section>
+<form method="post" class="panel liability-form" id="liability-form">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<section class="liability-form-section"><div class="section-title"><span>1</span><div><h2>Loan identity</h2><p>Bank, account, loan type, and status.</p></div></div><div class="form-grid liability-fields">
+<label>Name of the Bank<input name="lender_name" maxlength="160" value="{{ liability['lender_name']|default('', true) }}" required></label>
+<label>Loan Account Number{% if is_edit %}<input value="Encrypted and unchanged" disabled><small>The stored account number remains protected.</small>{% else %}<input name="account_number" maxlength="100" value="{{ liability['account_number']|default('', true) }}" autocomplete="off" required>{% endif %}</label>
+<label>Loan Type<select name="liability_type" required>{% for item in liability_types %}<option value="{{ item }}" {% if liability['liability_type']|default('', true) == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
+<label>Status<select name="status" required>{% for item in statuses %}<option value="{{ item }}" {% if liability['status']|default('Active', true) == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
+</div></section>
+<section class="liability-form-section"><div class="section-title"><span>2</span><div><h2>Balances and EMI</h2><p>Principal, outstanding balance, repayment, and interest.</p></div></div><div class="form-grid liability-fields">
+<label>Total Outstanding<input type="number" step="0.01" min="0.01" name="original_principal" id="original_principal" value="{{ liability['original_principal']|default('', true) }}" required></label>
+<label>Current Outstanding<input type="number" step="0.01" min="0" name="current_balance" id="current_balance" value="{{ liability['current_balance']|default('0', true) }}" required></label>
+<label>Currency<select name="currency" required>{% for item in currencies %}<option value="{{ item }}" {% if liability['currency']|default('INR', true) == item %}selected{% endif %}>{{ currency_symbol(item) }} {{ item }}</option>{% endfor %}</select></label>
+<label>EMI Amount<input type="number" step="0.01" min="0" name="regular_payment" value="{{ liability['regular_payment']|default('0', true) }}" required></label>
+<label>EMI Date<input type="date" name="emi_date" value="{{ liability['emi_date']|default('', true) }}" required></label>
+<label>Rate of Interest (%)<input type="number" step="0.0001" min="0" max="100" name="interest_rate" value="{{ liability['interest_rate']|default('0', true) }}" required></label>
+<label>Outstanding Percentage<input class="calculated" id="outstanding_percentage" value="0.00%" readonly></label><label>Repaid Percentage<input class="calculated positive" id="repaid_percentage" value="0.00%" readonly></label>
+</div></section>
+<section class="liability-form-section"><div class="section-title"><span>3</span><div><h2>Loan schedule</h2><p>Dates, rate structure, frequency, and payment method.</p></div></div><div class="form-grid liability-fields">
+<label>Origination Date<input type="date" name="origination_date" value="{{ liability['origination_date']|default('', true) }}" required></label><label>Maturity / End Date<input type="date" name="maturity_date" value="{{ liability['maturity_date']|default('', true) }}" required></label>
+<label>Rate Type<select name="rate_type" required><option value="FIXED" {% if liability['rate_type']|default('FIXED', true) == 'FIXED' %}selected{% endif %}>Fixed</option><option value="VARIABLE" {% if liability['rate_type']|default('', true) == 'VARIABLE' %}selected{% endif %}>Variable</option></select></label>
+<label>Payment Frequency<select name="payment_frequency" required>{% for item in payment_frequencies %}<option value="{{ item }}" {% if liability['payment_frequency']|default('Monthly', true) == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
+<label>Payment Method<select name="payment_method" required>{% for item in payment_methods %}<option value="{{ item }}" {% if liability['payment_method']|default('', true) == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
+</div></section>
+<div class="liability-notes-wrap"><label>Notes<textarea name="notes" maxlength="1000" rows="4">{{ liability['notes']|default('', true) }}</textarea></label></div>
+<div class="form-actions liability-form-actions"><a class="button secondary" href="{{ url_for('liabilities') }}">Cancel</a><button type="submit">{{ 'Update' if is_edit else 'Save' }} Loan</button></div>
+</form></div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='liabilities.js') }}" defer></script>{% endblock %}
